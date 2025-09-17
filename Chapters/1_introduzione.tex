@@ -1,0 +1,54 @@
+\chapter{Introduzione}
+\label{cap:1}
+Nel presente capitolo, si andrà a spiegare il contesto del lavoro di tesi, le motivazioni della scelta del problema trattato e l'obiettivo principale dell'intero lavoro di tesi. In aggiunta, sarà fornita anche una panoramica che anticiperà la struttura generale della tesi.
+
+\section{Contesto e Motivazione}
+Il Sole è da sempre stato l'oggetto di numerosi studi in quanto fonte di numerosi fenomeni magnetici ed energetici su scala astrofisica. Tra i più rilevanti, vi sono i \textbf{flare solari}: si tratta di esplosioni improvvise, con elevata intensità di energia sotto forma di radiazioni elettromagnetiche, che avvengono sulla fotosfera solare, e che impattano sulla tecnologia e sull'ambiente spaziale circostante. \\
+L'identificazione delle \textit{regioni attive} è di fondamentale importanza per le seguenti motivazioni:
+    \item \textbf{Protezione delle infrastrutture tecnologiche} \\
+    I flare solari possono causare interruzioni nelle comunicazioni radio (in particolar modo di quelle a frequenze elevate), influenzare i sistemi GPS e danneggiare satelliti. Ad esempio, il più potente flare mai registrato, avvenuto ad Halloween del 2003, ha causato gravi disservizi in tutto il mondo, tra cui blackout e malfunzionamenti satellitari \citep{cmealerts2025}.
+    \item \textbf{Prevenzione di rischi per la salute umana} \\
+    Le radiazioni emessa dai flare potrebbe causare danni alla salute di astronauti e passeggeri di aerei ad alta quota. Per questo, monitorare tali eventi è essenziale per salvaguardare la salute umana. \citep{jyp2023}.
+    \item \textbf{Previsione dei fenomeni atmosferici spaziali} \\
+    I flare solari sono spesso accompagnati da eiezioni di massa coronale (CME), che potrebbero scatenare tempeste geomagnetiche sulla Terra, con danni per le reti elettriche e influenze negative sui sistemi di navigazione e comunicazione \citep{nso2025}.
+    \item \textbf{Comprensione della fisica solare} \\
+    Studiare i flare solari aiuta a comprendere i processi fisici alla base delle esplosioni solari, come la riconnessione magnetica e l'accelerazione delle particelle. Questa conoscenza è di fondamentale importanza per migliorare le previsioni e gestire i rischi che ne conseguono \citep{jyp2023}.
+    \item \textbf{Preparazione per eventi estremi} \\
+    Tra gli eventi estremi, ricordiamo il "Carrington Event" (1859), una tempesta solare che ha causato danni alle linee telegrafiche, dimostrando che è necessario prepararsi ad eventuali catastrofi spaziali. Secondo alcuni studi recenti, eventi simili potrebbero impattare negativamente anche sulle moderne infrastrutture tecnologiche \citep{wikiCarrington,cmealerts2025}.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{Figs/Cap1/flare_solare.jpg}
+  \caption[Flare Solare]{Immagine del Sole in cui sono in atto flare solari}
+\end{figure}
+
+
+\section{Obiettivo della Tesi}
+Da quanto spiegato fino ad ora, quindi, lo studio dell’attività solare possiede un ruolo fondamentale nella conoscenza del ciclo solare e nell’analisi del cosiddetto \textit{space weather}, ovvero l’insieme dei fenomeni astrofisici che possono influenzare le tecnologie spaziali e terrestri. \\
+Poichè gli eventi più rilevanti, in questo contesto, sono, come già detto, i \textbf{flare solari}, la presente tesi si propone di:
+\begin{enumerate}
+    \item \textbf{Sviluppare un sistema automatico per l’identificazione delle regioni attive} visibili nei magnetogrammi solari, attraverso l’analisi dei dati HMI forniti dal satellite SDO. A tal fine, è stato modificato e riadattato il modello di object detection \texttt{YOLOv7}, in modo da renderlo utilizzabile in contesto astrofisico, integrandolo con la libreria \texttt{Norfair} per il tracking temporale delle regioni attive.
+    \item \textbf{Implementare un metodo di localizzazione automatica} (basato sull'estrazione delle bounding box) per le regioni attive, sfruttando dataset di tipologia HARP.
+    \item \textbf{Studiare la correlazione tra le regioni attive e l’emissione di flare}, analizzando la loro evoluzione nel tempo e la morfologia magnetica.
+    \item \textbf{Utilizzo di un dataset annotato} per addestrare il modello modificato di YOLOv7 nell'ambito del machine learning, per il riconoscimento automatico dei flare.
+\end{enumerate}
+
+\textbf{YOLOv7} è un modello di object detection preesistente, ideato per identificare e localizzare oggetti in immagini RGB in modo accurato e veloce \citep{wang2022yolov7}. Per adattarlo all’analisi dei magnetogrammi solari e delle regioni attive descritte nei dati HARP, sono state apportate le seguenti modifiche:
+\begin{itemize}
+  \item caricamento di immagini in formato scientifico (file \texttt{.h5} contenenti magnetogrammi e bounding box HARP);
+  \item estrazione delle bounding box a partire dai dati HARP;
+  \item addestramento del modello per rilevare regioni attive in immagini solari;
+  \item integrazione con la libreria \texttt{Norfair} per il tracking temporale delle regioni attive rilevate.
+\end{itemize}
+Queste modifiche permettono di sfruttare al meglio YOLOv7 in un contesto scientifico, differente da quello per cui è stato concepito, ma mantenendo l’efficienza del modello originale.\\
+I dati utilizzati in questo lavoro provengono dal \textbf{Joint Science Operations Center} (JSOC), la struttura responsabile per l’elaborazione e la distribuzione dei dati del \textit{Solar Dynamics Observatory} (SDO), gestita dalla Stanford University in collaborazione con la NASA \citep{pesnell2012solar}.\\
+I dati HARP sono particolarmente adatti per questo tipo di analisi in quanto forniscono una rappresentazione compatta e strutturata delle regioni attive, utile per analisi temporali e per la definizione automatica delle aree di interesse.\\
+La selezione dei dati è avvenuta a cura di Elizabeth Doria Rosales, dottoranda in fisica presso l'Università di Trento.
+
+\section{Struttura della Tesi}
+La tesi è strutturata nei seguenti capitoli:
+\begin{itemize}
+    \item \hyperref[cap:2]{\textbf{Capitolo 2}}: Panoramica delle tecnologie e metodologie utilizzate, con focus sul modello YOLOv7 e libreria Norfair.
+    \item \hyperref[cap:3]{\textbf{Capitolo 3}}: Descrizione del sistema sviluppato e delle modifiche apportate al modello preesistente.
+    \item \hyperref[cap:4]{\textbf{Capitolo 4}}: Analisi dei risultati sperimentali, con valutazioni.
+\end{itemize}
+Infine, le conclusioni racchiudono una riflessione sui risultati ottenuti, sui limiti del lavoro effettuato e le potenziali direzioni da poter intraprendere in futuro.

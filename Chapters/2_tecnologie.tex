@@ -1,0 +1,669 @@
+\chapter{Modelli e Metodologie Utilizzate}
+\label{cap:2}
+
+Nel presente capitolo sono descritte le principali tecnologie e metodologie adottate durante lo sviluppo del progetto.
+
+\section{Panoramica sull'Intelligenza Artificiale, l'Object Detection e le Bounding Box}
+
+\subsection{Intelligenza Artificiale}
+L'\textbf{Intelligenza Artificiale} (IA) è un campo dell'informatica che si propone di sviluppare sistemi in grado di svolgere attività tipicamente umane, quali ragionamento, apprendimento automatico, elaborazione del linguaggio naturale e percezione visiva\cite{russell2010artificial}.
+Negli ultimi anni, l'IA ha compiuto enormi passi in avanti, e questo lo deve all'evoluzione del \textit{machine learning} (ML), e in particolare del \textit{deep learning} (DL). Tutto ciò ha reso possibile affrontare con successo problemi complessi come il riconoscimento facciale, la traduzione automatica, il rilevamento di oggetti e persino la guida autonoma \cite{goodfellow2016deep}. \\
+Nel contesto dell’IA moderna, le tecniche più rilevanti sono:
+\begin{itemize}
+    \item \textbf{Machine Learning:} metodi che apprendono da dati osservati senza essere esplicitamente programmati per ogni compito.
+    \item \textbf{Deep Learning:} architetture neurali multilivello, capaci di apprendere rappresentazioni gerarchiche e complesse dei dati.
+    \item \textbf{Apprendimento supervisionato e non supervisionato:} rispettivamente con o senza etichette nei dati di input.
+\end{itemize}
+
+\subsubsection{Machine Learning}
+Il \textbf{Machine Learning} (ML) è una branca dell’intelligenza artificiale che si occupa di progettare algoritmi in grado di apprendere automaticamente dai dati, migliorando le proprie prestazioni nel tempo senza essere esplicitamente programmati \cite{mitchell1997machine}.
+Un algoritmo di Machine Learning è addestrato su un insieme di dati \textit{training set}, per poi essere valutato su dati non visti, detti \textit{test set}, così da poter verificarne la sua capacità di generalizzazione. \\
+Le principali modalità di apprendimento nel ML sono:
+\begin{itemize}
+    \item \textbf{Apprendimento supervisionato:} l’algoritmo apprende da dati etichettati, ovvero ogni esempio presente dataset è associato ad un output già noto. Questa rappresenta la modalità più usata, soprattutto per quanto riguarda la classificazione di immagini o il riconoscimento vocale.
+    \item \textbf{Apprendimento non supervisionato:} i dati non hanno etichette, per cui è l’algoritmo stesso a tentare di identificare strutture nascoste o raggruppamenti nei dati. Questa modalità è usata nel clustering, nella compressione o nel rilevamento di anomalie.
+    \item \textbf{Apprendimento per rinforzo:} un agente interagisce con un ambiente e apprende tramite un sistema di ricompense e penalità, ottimizzando le proprie decisioni. Questa modalità è impiegata, ad esempio, nei videogiochi o nella robotica autonoma.
+\end{itemize}
+
+\subsubsection{Deep Learning}
+Il \textbf{Deep Learning} (DL), come accennato prima, è una sottoclasse del ML che utilizza \textit{reti neurali profonde}, composte da molti strati (\textit{layers}) nascosti. Tali modelli sono particolarmente efficienti nel trattare dati complessi e non strutturati, come immagini, audio e testo \cite{goodfellow2016deep}.
+Grazie alla grande disponibilità di dati e potenza computazionale, il Deep Learning ha rivoluzionato il campo della computer vision, rendendo possibili compiti prima irrisolvibili, tra cui:
+\begin{itemize}
+    \item Riconoscimento facciale in tempo reale
+    \item Traduzione automatica basata sul contesto
+    \item Rilevamento e classificazione di oggetti in immagini ad alta risoluzione
+\end{itemize}
+
+\subsection{Object Detection}
+L'\textbf{Object Detection} è un'area fondamentale della \textit{computer vision} che ha l'obiettivo di localizzare e classificare automaticamente uno o più oggetti in un'immagine o in un video \cite{zhao2019object}.
+I modelli di Object Detection producono come output sia la \textit{categoria} di ciascun oggetto (es. ``persona'', ``auto'', ``segnale stradale''), sia una \textit{bounding box} che ne racchiude l'area nell'immagine. \\
+Le principali tecniche si dividono in due grandi famiglie:
+\begin{itemize}
+    \item \textbf{Two-stage detectors:} suddividono il processo in due fasi distinte: dapprima vi è la generazione di regioni proposte (Region Proposal Network, RPN) e successivamente la classificazione delle regioni. Esempi noti sono R-CNN, Fast R-CNN e Faster R-CNN \cite{ren2015faster}.
+    \item \textbf{One-stage detectors:} eseguono direttamente la classificazione e la regressione delle bounding box in un'unica fase, abbreviando notevolmente i tempi. I principali rappresentanti di questa famiglia sono YOLO (You Only Look Once) - di cui è stato fatto uso per il presente progetto di tesi - \cite{redmon2016you} e SSD (Single Shot MultiBox Detector) \cite{liu2016ssd}.
+\end{itemize}
+
+\subsubsection{Metriche di Valutazione}
+L'efficacia di un modello di Object Detection viene valutata con metriche come:
+\begin{itemize}
+    \item \textbf{Intersection over Union (IoU):} misura l'intersezione tra la bounding box predetta e quella reale:
+    \[
+    \text{IoU} = \frac{\text{Area of Overlap}}{\text{Area of Union}}
+    \] \\
+    Un valore di IoU pari a 1 indica una corrispondenza perfetta tra predizione e ground truth, mentre un valore pari a 0 indica assenza totale di sovrapposizione.
+    \item \textbf{Precision, Recall e mAP (mean Average Precision):} metriche derivate da classificazione e localizzazione, il cui scopo è confrontare le prestazioni tra modelli.
+\end{itemize}
+
+\subsection{Bounding Box}
+La \textbf{bounding box} è un rettangolo utilizzato per racchiudere un oggetto rilevato all'interno di un'immagine. È solitamente rappresentata da quattro coordinate:
+\[
+(x_{\text{min}}, y_{\text{min}}, x_{\text{max}}, y_{\text{max}})
+\]
+dove:
+\begin{itemize}
+    \item $(x_{\text{min}}, y_{\text{min}})$ rappresenta il vertice in alto a sinistra,
+    \item $(x_{\text{max}}, y_{\text{max}})$ rappresenta il vertice in basso a destra.
+\end{itemize}
+Alternativamente, può essere espressa con centro e dimensioni:
+\[
+(x_{\text{center}}, y_{\text{center}}, w, h)
+\]
+dove $w$ e $h$ sono larghezza e altezza.\\
+L’accuratezza delle bounding box è cruciale nei sistemi real-time come la guida autonoma, la sorveglianza video o l’analisi di immagini satellitari, dove la minima imprecisione può compromettere l’affidabilità dell'intero sistema.
+
+\subsection{Applicazioni}
+Le possibili applicazioni dell'Object Detection, assieme all'utilizzo delle bounding box, sono molteplici. Alcuni esempi possono essere:
+\begin{itemize}
+    \item \textbf{Veicoli autonomi:} per rilevare pedoni, segnali stradali e/o altri veicoli.
+    \item \textbf{Videosorveglianza:} per il rilevamento di attività sospette o intrusioni.
+    \item \textbf{Medicina:} per individuare anomalie in immagini radiologiche.
+    \item \textbf{Astronomia e climatologia:} per l'identificazione automatica di eventi rari o transitori, come flare solari.
+\end{itemize}
+
+\subsection{Conclusione}
+L'utilizzo combinato di IA, Object Detection e bounding box ha trasformato radicalmente il modo in cui le macchine percepiscono e interagiscono con il mondo visivo. I continui sviluppi in questo ambito promettono ulteriori miglioramenti in precisione, efficienza e applicabilità in scenari sempre più complessi.
+
+\section{Python}
+Python è un linguaggio di programmazione ad alto livello, ampiamente utilizzato per la sua:
+\begin{itemize}
+    \item Semplicità di sintassi che, di fatto, è chiara e leggibile, per cui lo rendono un linguaggio facile da leggere e scrivere.
+    \item Versatilità, in quanto utilizzabile per Data Science, Machine Learning, Sviluppo Web, Automazione, Scripting e così via.
+    \item Ecosistema ricco di librerie.
+\end{itemize}
+Spicca come linguaggio per i suoi \textit{punti di forza}:
+\begin{itemize}
+    \item Adattabilità ad ogni piattaforma
+    \item Interattività e dinamicità.
+    \item Protipizzazione rapida.
+    \item Presenza di una grande comunità di supporto
+\end{itemize}
+Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio principale per lo sviluppo degli script e l'esecuzione degli elaborazione dati, visione artificiale e deep learning.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.4\textwidth]{Figs/Cap2/logo_python.png}
+  \caption{Logo di Python}
+\end{figure}
+
+\subsection{Librerie ausiliarie}
+\begin{itemize}
+  \item \textbf{NumPy} \cite{numpy}: è la libreria fondamentale per il calcolo scientifico in Python. Fornisce strutture dati per la gestione di array multidimensionali e una innumerevoli funzioni matematiche per operazioni vettoriali e matriciali. Nel progetto, è stata utilizzata per la manipolazione e preparazione dei dati numerici.
+  \item \textbf{SciPy} \cite{scipy}: estende le funzionalità di NumPy, offrendo strumenti per operazioni matematiche avanzate come integrazione numerica, ottimizzazione, interpolazione e algebra lineare. Nel progetto, è stata utilizzata per supportare calcoli complessi durante l’analisi dei dati e l’elaborazione dei risultati.
+  \item \textbf{OpenCV} \cite{opencv}: libreria open source per la computer vision e l’elaborazione delle immagini. Offre algoritmi ottimizzati per operazioni di filtraggio, rilevamento di caratteristiche, trasformazioni geometriche e manipolazione delle immagini. Nel progetto, è stata usata per la pre-elaborazione e manipolazione dei magnetogrammi solari.
+  \item \textbf{Matplotlib} \cite{matplotlib}: libreria di visualizzazione dati che permette la creazione di grafici statici, animati e interattivi. Consente di rappresentare chiaramente e in modo personalizzabile i risultati ottenuti, facilitando l’analisi e la documentazione visiva dei dati elaborati.
+\end{itemize}
+
+\section{Miniconda}
+Miniconda è una distribuzione minimale di Conda, un sistema di gestione degli ambienti e dei pacchetti Python. È stato utilizzato per creare ambienti isolati in cui installare versioni specifiche delle librerie necessarie, evitando conflitti di dipendenze e facilitando la riproducibilità degli esperimenti.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{Figs/Cap2/miniconda_logo.jpg}
+  \caption{Logo di Miniconda}
+\end{figure}
+
+\subsection{Gestione degli ambienti virtuali}
+Ogni ambiente può essere configurato con una propria versione di Python e delle librerie di terze parti, come PyTorch, NumPy, OpenCV, ecc. Questa gestione permette di isolare i progetti e mantenere sotto controllo le dipendenze \cite{miniconda}.
+
+\section{PyTorch}
+PyTorch è un framework open-source per il deep learning sviluppato da Meta AI. È stato utilizzato per l'esecuzione e l'addestramento dei modelli YOLOv7. PyTorch fornisce un'interfaccia dinamica e intuitiva per la definizione e l'ottimizzazione delle reti neurali, ed è particolarmente apprezzato per il suo supporto nativo all’accelerazione tramite GPU \cite{paszke2019pytorch}.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.3\textwidth]{Figs/Cap2/logo_pytorch.png}
+  \caption{Logo di Pytorch}
+\end{figure}
+
+\section{CUDA}
+CUDA (Compute Unified Device Architecture) è una piattaforma di calcolo parallelo sviluppata da NVIDIA, che consente l’utilizzo delle GPU per compiti generici di calcolo. 
+
+\subsection{Accelerazione hardware}
+Nel contesto di questa tesi, CUDA è stata utilizzata per velocizzare sia l’inferenza che l’addestramento dei modelli deep learning. La compatibilità tra la versione di CUDA e quella di PyTorch è essenziale per il corretto funzionamento dei modelli su GPU.\cite{cuda}.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.4\textwidth]{Figs/Cap2/logo_cuda.png}
+  \caption{Logo di CUDA}
+\end{figure}
+
+\section{Norfair}
+\textbf{Norfair} è una libreria open source sviluppata in Python per il tracking multi-oggetto in tempo reale \cite{norfair}. Essa è progettata per integrarsi facilmente con qualsiasi sistema di rilevamento che fornisca coordinate spaziali (ad esempio le coordinate \((x, y)\) dei centri delle bounding box). \\
+La libreria si occupa esclusivamente della parte di tracking, ovvero dell'associazione temporale dei rilevamenti (\textit{detections}) frame per frame, mantenendo un identificatore univoco stabile per ogni oggetto monitorato nel video o nel flusso di immagini. Non include invece la componente di rilevamento, che deve essere fornita esternamente (ad esempio tramite modelli YOLO, Detectron2, MediaPipe, ecc.).
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{Figs/Cap2/logo_norfair.png}
+  \caption{Logo di Norfair}
+\end{figure}
+
+\subsection{Funzionamento Principale}
+Il funzionamento di Norfair si basa sui seguenti \textit{concetti chiave}:
+\begin{itemize}
+  \item \textbf{Detections}: ogni oggetto rilevato in un fotogramma è rappresentato da una o più coordinate spaziali, tipicamente il centro della bounding box o altri punti di interesse.
+  \item \textbf{Tracks}: sono le tracce temporali associate agli oggetti, che mantengono lo storico delle posizioni rilevate nel tempo.
+  \item \textbf{Funzione di distanza}: per associare i nuovi rilevamenti alle tracce esistenti, Norfair utilizza una funzione di distanza personalizzabile (ad esempio distanza euclidea o basata su caratteristiche visive).
+  \item \textbf{Assegnazione}: ogni nuova detection viene assegnata alla traccia più vicina purché la distanza sia inferiore a una soglia predefinita (\textit{distance threshold}); in caso contrario, viene creata una nuova traccia.
+\end{itemize}
+Ad ogni nuovo fotogramma, Norfair riceve l’elenco delle detections, aggiorna le tracce esistenti o ne crea di nuove e rimuove quelle non aggiornate per un certo numero di frame, garantendo così un tracking coerente anche in presenza di occlusioni temporanee o movimenti rapidi.
+
+\subsection{Struttura del progetto}
+La struttura della ripository ufficiale della libreria Norfair (\url{https://github.com/tryolabs/norfair}) è organizzata come segue:
+\begin{itemize}
+  \item \texttt{norfair/}: codice sorgente principale della libreria che implementa la logica di tracking (\texttt{tracker.py}), la gestione di flussi video e visualizzazione dei risultati (\texttt{video.py}) e le metriche di valutazione di prestazioni di tracking ad esempio accuratezza e precisione (\texttt{metrics.py}).
+  \item \texttt{demos/}: esempi pratici di integrazione con vari rilevatori come YOLOv5 e Detectron2, che facilitano l’utilizzo in scenari reali.
+  \item \texttt{docs/}: documentazione dettagliata della libreria.
+  \item \texttt{tests/}: suite di test automatici per assicurare la correttezza e stabilità del codice.
+  \item File di configurazione per gestione dipendenze, controllo qualità e continuous integration.
+\end{itemize}
+
+\subsection{Caratteristiche principali}
+\begin{itemize}
+  \item Tracking multi-oggetto semplice e modulare, con poche righe di codice.
+  \item Compatibilità con qualsiasi modello di rilevamento basato su coordinate spaziali.
+  \item Personalizzazione della funzione di distanza per adattarsi a diversi tipi di dati e scenari.
+  \item Supporto per video, immagini statiche e flussi in tempo reale (ad esempio webcam).
+  \item Visualizzazione interattiva dei risultati e metriche di valutazione integrate.
+  \item Capacità avanzate quali tracking in spazi multidimensionali e integrazione di feature vettoriali per migliorare l’associazione.
+\end{itemize}
+
+\subsection{Applicazioni tipiche}
+Norfair è utilizzata in molteplici ambiti, tra cui:
+\begin{itemize}
+  \item Videosorveglianza e sicurezza.
+  \item Analisi di movimento in sport e intrattenimento.
+  \item Robotica e veicoli autonomi.
+  \item Monitoraggio di oggetti in ambienti complessi, come il tracking di flare solari nel presente lavoro.
+\end{itemize}
+In sintesi, Norfair rappresenta uno strumento flessibile e potente per il tracking multi-oggetto in tempo reale, integrandosi facilmente con sistemi di rilevamento esterni e fornendo una gestione efficiente e personalizzabile delle tracce degli oggetti rilevati.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\textwidth]{Figs/Cap2/traffic.jpg}
+  \caption{Esempio di multidetection di Norfair}
+\end{figure}
+
+\section{YOLOv7}
+\textbf{YOLOv7} (You Only Look Once version 7) è uno dei modelli più recenti e avanzati per il rilevamento oggetti in tempo reale, appartenente alla famiglia di algoritmi YOLO. Sviluppato per ottenere alte prestazioni sia in termini di accuratezza che di velocità, YOLOv7 si distingue per una serie di ottimizzazioni che lo rendono adatto ad innumerevoli applicazioni, anche su dispositivi con risorse computazionali limitate \cite{wang2022yolov7}.
+
+\subsection{Caratteristiche principali}
+YOLOv7 è progettato per realizzare un pipeline \emph{end-to-end}, che riceve in input un’immagine e restituisce in output le bounding box e le classi associate agli oggetti rilevati. Le principali caratteristiche del modello includono:
+\begin{itemize}
+  \item Elevata precisione nel rilevamento, mantenendo alte velocità di inferenza.
+  \item Supporto per Object Detection, Instance Segmentation e Pose Estimation.
+  \item Architetture derivate ed estese (ad esempio YOLOv7-tiny, YOLOv7-X, YOLOv7-W6) adattabili a diverse situazioni.
+  \item Ottimizzazione per GPU CUDA, che consente un'inferenza efficiente su hardware NVIDIA.
+  \item Possibilità di usare \emph{multi-head} per compiti multitask (ad esempio detection + keypoints).
+\end{itemize}
+
+\subsection{Funzionamento}
+Il modello, durante l'inferenza, elabora un’immagine, suddividendola in griglie e applicando convoluzioni profonde per produrre:
+\begin{itemize}
+  \item Le coordinate delle bounding box.
+  \item La classe predetta per ogni oggetto rilevato.
+  \item La probabilità associata a ciascuna predizione.
+\end{itemize}
+In fase di addestramento, YOLOv7 utilizza tecniche avanzate di ottimizzazione che migliorano l’apprendimento, senza aumentare la complessità dell’inferenza \cite{wang2022yolov7}.
+
+\subsection{Struttura del progetto}
+La struttura della repository ufficiale (\url{https://github.com/WongKinYiu/yolov7}) è composta da diverse cartelle e script, ciascuno con un ruolo specifico:
+\begin{itemize}
+  \item \texttt{cfg/}: contiene i file di configurazione (\texttt{.yaml} e \texttt{.cfg}) relativi all’architettura del modello. Ogni file definisce la struttura dei layer (es. convoluzionali, bottleneck) per varianti come \texttt{YOLOv7}, \texttt{YOLOv7-Tiny}, ecc.
+  \item \texttt{data/}: definisce i dataset utilizzati per l’addestramento, le classi da rilevare e le directory contenenti immagini e annotazioni.
+  \item \texttt{models/}: contiene il codice Python per l’implementazione delle architetture neurali, includendo moduli per i backbone e le detection head.
+  \item \texttt{tools/}: include script ausiliari per la conversione di modelli (es. in formato ONNX), calcolo del numero di operazioni (FLOPs), e benchmarking.
+  \item \texttt{figures/}: diagrammi esplicativi dell’architettura e delle innovazioni introdotte.
+\end{itemize}
+Gli script principali della repository sono:
+\begin{itemize}
+  \item \texttt{train.py}: script principale per l’addestramento del modello su dataset personalizzati o standard.
+  \item \texttt{detect.py}: esegue l’inferenza su immagini, video o webcam.
+  \item \texttt{test.py}: valuta le prestazioni del modello su un dataset di test.
+  \item \texttt{export.py}: converte il modello in formato ONNX o altri per l’inferenza su dispositivi edge.
+\end{itemize}
+
+\subsection{Applicazioni}
+YOLOv7 trova impiego in numerosi ambiti, tra cui:
+\begin{itemize}
+  \item Videosorveglianza e sicurezza pubblica.
+  \item Veicoli autonomi e sistemi ADAS.
+  \item Controllo qualità industriale.
+  \item Analisi sportiva e tracciamento di giocatori.
+  \item Ricerca scientifica, ad esempio nel rilevamento di flare solari su dati astrofisici.
+\end{itemize}
+
+\subsection{Avanzamenti nei Rilevatori in Tempo Reale}
+\subsubsection{Introduzione}
+YOLOv7 rappresenta un significativo passo avanti nel campo del \textit{real-time object detection}. L’architettura introduce il concetto di \textbf{trainable bag-of-freebies}: moduli e strategie che migliorano la fase di addestramento senza influenzare negativamente la velocità di inferenza. \\
+Tutti i modelli YOLOv7 sono stati addestrati da zero sul dataset COCO, senza utilizzare pesi pre-addestrati o dati esterni.
+
+\subsubsection{E-ELAN: Extended Efficient Layer Aggregation Networks}
+L’architettura YOLOv7 si basa su una nuova variante chiamata \textbf{E-ELAN}, progettata per migliorare l’apprendimento delle rappresentazioni mantenendo inalterata la lunghezza dei percorsi di propagazione del gradiente.\\
+Questo viene ottenuto tramite:
+\begin{itemize}
+  \item \textbf{Group Convolution}: suddivide i canali in gruppi.
+  \item \textbf{Shuffle \& Merge Cardinality}: mescola e fonde le feature map.
+  \item \textbf{Struttura fissa}: le transizioni non vengono modificate.
+\end{itemize}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1.0\textwidth]{Figs/Cap2/e-elan.png}
+  \caption[Reti estese per l’aggregazione efficiente dei layer (Extended ELAN)]{L’architettura proposta E-ELAN mantiene invariato il percorso di propagazione del gradiente dell’architettura originale, ma utilizza convoluzioni di gruppo per aumentare la cardinalità delle feature aggiunte. Le feature provenienti da diversi gruppi vengono combinate attraverso operazioni di mescolamento e fusione, migliorando così la varietà delle rappresentazioni apprese e l’efficienza nell’uso dei parametri e del calcolo.\cite{wang2022yolov7}.}
+\end{figure}
+
+\subsubsection{Model Scaling: Compound Scaling per modelli concatenativi}
+Il ridimensionamento del modello avviene sia in profondità (\(d\)) che in larghezza (\(w\)). Tuttavia, nei modelli basati su concatenazioni (come YOLOv7), i metodi tradizionali di scaling non sono applicabili direttamente.
+
+\subsubsection{Problema}
+In un modello concatenativo, scalare solo la profondità causa una variazione della dimensione dei canali nei layer successivi, rompendo l’equilibrio computazionale.
+\subsubsection{Soluzione: Compound Scaling}
+YOLOv7 propone uno \textbf{scaling congiunto}:
+\[
+\begin{aligned}
+d' &= d \cdot \alpha \\
+w' &= w \cdot \beta
+\end{aligned}
+\]
+dove \(\alpha\) e \(\beta\) sono fattori empiricamente scelti (es. \(\alpha=1.5\), \(\beta=1.25\)).
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1.0\textwidth]{Figs/Cap2/compound-scaling.png}
+  \caption[Scaling nei modelli basati su concatenazione]{Comportamento e la soluzione proposta per lo scaling nei modelli basati su concatenazione, composta da tre sottoparti: (a): Dimostra che scalare solo la profondità (depth) in un blocco concatenativo fa aumentare la larghezza del layer di uscita; (b): Mostra che l’output più largo influenza la transizione successiva, creando problemi strutturali; (c): Presenta la soluzione proposta: uno scaling combinato (compound scaling), in cui si scala la profondità nel blocco e la larghezza nei layer di transizione per mantenere la coerenza architetturale.}
+\end{figure}
+
+\subsubsection{Planned Re-parameterized Convolution}
+La \textbf{RepConv} standard combina:
+\[
+\text{RepConv} = \text{Conv}_{3\times3} + \text{Conv}_{1\times1} + \text{Id}
+\]
+ma questa configurazione può interferire con le connessioni residue (\textit{ResNet}) o concatenate (\textit{DenseNet}). Viene quindi introdotto:
+\[
+\text{RepConvN} = \text{Conv}_{3\times3} + \text{Conv}_{1\times1}
+\]
+che esclude l'identità nei layer sensibili, migliorando l'efficacia dell’ottimizzazione in architetture non PlainNet.
+
+\subsubsection{Label Assignment: Coarse-to-Fine Lead Guided}
+Durante il training, YOLOv7 introduce un metodo di \textbf{label assignment soft}, in cui l’\textbf{auxiliary head} riceve etichette più "rilassate" (coarse) rispetto alla \textbf{lead head} (fine).
+\begin{itemize}
+  \item Il lead head genera predizioni raffinate.
+  \item L’auxiliary head riceve etichette guidate dal lead head, non direttamente dal ground truth.
+\end{itemize}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1.0\textwidth]{Figs/Cap2/coarse-fine-labels.png}
+  \caption[Etichette coarse]{Assegnazione di etichette coarse per l’head ausiliario e fine per il lead head. Rispetto al modello standard (a), lo schema (b) include una testa ausiliaria. Diversamente dall’assegnazione indipendente delle etichette (c), sono proposte due nuove strategie: (d) assegnazione guidata dal lead head e (e) assegnazione guidata coarse-to-fine. Quest’ultima genera contemporaneamente le etichette per il training del lead head e della testa ausiliaria combinando le predizioni del lead head con il ground truth.  \cite{wang2022yolov7}.}
+\end{figure}
+
+\subsubsection{Upper bound constraint}
+Per evitare overfitting dell’auxiliary head sulle etichette coarse, viene applicato un vincolo sulla predizione di oggetti lontani dal centro:
+\[
+\text{Score}_{\text{coarse}} = \max \left( 0, 1 - \frac{\text{dist}}{\text{thresh}} \right)
+\]
+\subsubsection{Trainable Bag-of-Freebies}
+YOLOv7 integra anche alcuni “trucchi” di training ottimizzati:
+\begin{itemize}
+  \item \textbf{BatchNorm fuso}: semplifica la convoluzione durante l’inferenza.
+  \item \textbf{Implicit Knowledge}: concetto da YOLOR, semplificato in vettori statici.
+  \item \textbf{EMA model}: modello a media esponenziale usato per la fase di test.
+\end{itemize}
+
+\subsubsection{Confronto con modelli real-time (COCO)}
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\hline
+Modello & FPS & mAP & Parametri & FLOPs \\
+\hline
+YOLOv5-X & 83 & 50.7\% & 86.7M & 205.7G \\
+YOLOR-CSP-X & 87 & 52.7\% & 96.9M & 226.8G \\
+\textbf{YOLOv7-X} & \textbf{114} & \textbf{52.9\%} & 71.3M & 189.9G \\
+\hline
+\end{tabular}
+\caption{Confronto YOLOv7 vs altri modelli (640×640).}
+\end{table}
+
+\subsubsection{Scalabilità ed efficienza}
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+Modello & mAP & Parametri & FLOPs \\
+\hline
+Base & 51.7\% & 47.0M & 125.5G \\
+Solo larghezza & 52.4\% & 73.4M & 195.5G \\
+Solo profondità & 52.7\% & 69.3M & 187.6G \\
+\textbf{Compound (YOLOv7-X)} & \textbf{52.9\%} & 71.3M & 189.9G \\
+\hline
+\end{tabular}
+\caption{Efficienza del compound scaling rispetto a scaling semplice.}
+\end{table}
+
+\subsubsection{Conclusioni}
+YOLOv7 migliora significativamente i modelli YOLO precedenti grazie a:
+\begin{itemize}
+  \item Architettura E-ELAN per feature aggregation efficiente.
+  \item Compound model scaling specifico per concatenative networks.
+  \item Re-parameterized convolutions progettate per compatibilità strutturale.
+  \item Nuove strategie di assegnazione etichette basate su coarse-to-fine learning.
+  \item Risultati superiori in FPS e mAP su tutti i benchmark.
+\end{itemize}
+
+\subsection{Conclusioni}
+YOLOv7 rappresenta uno dei modelli più efficienti per il rilevamento oggetti, combinando prestazioni di livello state-of-the-art con una notevole velocità di elaborazione. La sua architettura modulare e il supporto per il multitasking lo rendono una scelta ideale per progetti real-time, sia industriali che di ricerca.
+
+\section{Dati HARP}
+\subsection{Definizione e significato}
+I dati HARP (\textit{Helioseismic and Magnetic Imager – Active Region Patches}) sono un insieme di dati prodotti automaticamente dalla NASA tramite lo strumento Helioseismic and Magnetic Imager (HMI), a bordo del satellite Solar Dynamics Observatory (SDO) \cite{Schou2012}. Essi consentono di identificare, tracciare e descrivere in modo sistematico le regioni attive solari, ovvero quelle aree caratterizzate da forti concentrazioni di campo magnetico, spesso associate all’origine dei flare solari e di altre manifestazioni di attività solare.
+
+\subsection{Finalità e utilizzi}
+I dati HARP svolgono un ruolo fondamentale nello studio dell’attività solare, in particolare per:
+\begin{itemize}
+    \item \textbf{Identificazione delle regioni attive}: l’algoritmo HARP riconosce automaticamente le regioni attive in ogni immagine magnetica (magnetogramma) del disco solare \cite{Bobra2014}.
+    \item \textbf{Tracciamento temporale}: consente di seguire l’evoluzione di ciascuna regione attiva dal momento della sua comparsa fino alla sua scomparsa.
+    \item \textbf{Quantificazione delle proprietà fisiche}: per ogni regione attiva vengono misurate caratteristiche quali superficie, intensità del campo magnetico (positivo e negativo), posizione sul disco solare e, se disponibile, il codice NOAA associato alla regione \cite{NSO_HARP}.
+\end{itemize}
+
+\subsection{Origine e metodo di acquisizione}
+I dati HARP sono calcolati automaticamente a partire dalle osservazioni HMI, grazie a un algoritmo che individua le concentrazioni magnetiche e le aggrega in patch, ciascuna identificata da un codice univoco chiamato \texttt{HARPNUM} \cite{Bobra2014}. Quando una regione è riconosciuta anche dal NOAA (\textit{National Oceanic and Atmospheric Administration}), le viene assegnato il relativo codice NOAA, stabilendo una corrispondenza tra classificazione automatica e classificazione ufficiale.
+
+\subsection{Applicazioni nel presente lavoro}
+Nel contesto di questa tesi, i dati HARP sono utilizzati per:
+\begin{itemize}
+    \item Disegnare \textit{bounding box} attorno alle regioni attive nelle immagini solari, permettendo di isolare le aree di interesse per l’analisi automatica.
+    \item Monitorare l’evoluzione temporale di ciascuna regione, al fine di identificare variazioni morfologiche e magnetiche nel tempo.
+    \item Studiare la correlazione tra le regioni attive e l’insorgenza di flare solari, contribuendo alla comprensione dei processi che ne regolano la genesi.
+\end{itemize}
+
+\subsection{Struttura del file}
+Ogni file è denominato con \texttt{hmi\_magnetogram\_YYYY\_MM\_DD\_MIN\_HH.h5} e contiene due gruppi:
+\begin{itemize}
+    \item Il principale \texttt{harp/metadata}, al cui interno sono presenti più sottogruppi \textbf{HARP\_XXXX}, ognuno dei quali corrisponde ad una regione attiva ed ospita una ricca collezione di metadati relativi alla regione stessa, ad esempio: osservazioni, coordinate, caratteristiche fisiche della regione, qualità dei dati, versioni del software utilizzato, dati geometrici e movimenti del satellite.
+    \item Il secondario \texttt{magnetogram}, che contiene: \texttt{data} (matrice 2D del magnetogramma, ovvero l'immagine del Sole che mostra il campo magnetico) e \texttt{metadata} (metadati relativi al magnetogramma stesso).
+\end{itemize}
+Le informazioni sono organizzate in centinaia di campi.\\
+Nei paragrafi successivi si riportano i campi suddivisi per tipologia.
+\subsubsection{Informazioni generali sull’osservazione}
+\vspace{-1em}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+HARPNUM & Identificatore della regione attiva (Active Region Patch) \\
+CONTENT & Tipo di contenuto: "HMI Active Region Patch" \\
+DATE & Data di creazione del dataset (UTC) \\
+DATE-OBS & Data e ora dell’osservazione iniziale (UTC) \\
+T\_OBS & Tempo dell’osservazione in tempo TAI \\
+T\_REC & Tempo del record (per indicizzazione) \\
+T\_FRST, T\_LAST & Prima e ultima osservazione della regione \\
+CADENCE & Cadenza temporale tra le osservazioni (secondi) \\
+\hline
+\end{tabular}
+\caption[Informazioni generali nei dati HARP]{Informazioni generali sull’osservazione contenute nei metadati HARP.}
+\end{table}
+
+\subsubsection{Coordinate e geometria}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+CRPIX1, CRPIX2 & Centro dell'immagine in pixel \\
+CRVAL1, CRVAL2 & Coordinate al centro dell'immagine \\
+CDELT1, CDELT2 & Risoluzione spaziale in arcsec/pixel \\
+CTYPE1, CTYPE2 & Tipo di proiezione (es. HPLN/HPLT) \\
+CUNIT1, CUNIT2 & Unità delle coordinate: arcsec \\
+CROTA2 & Rotazione dell’immagine (gradi) \\
+RSUN\_OBS, RSUN\_REF & Raggio solare osservato e di riferimento \\
+DSUN\_OBS, DSUN\_REF & Distanza Sole–osservatore (in m) \\
+CRLN\_OBS, CRLT\_OBS & Longitudine e latitudine del punto di osservazione \\
+\hline
+\end{tabular}
+\caption[Coordinate e geometria nei dati HARP]{Coordinate e geometria solare associate alla regione attiva.}
+\end{table}
+
+\subsubsection{Posizioni e dimensioni della regione attiva}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{p{0.35\textwidth} p{0.6\textwidth}}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+AREA, AREA\_ACR & Area della regione in pixel\textsuperscript{2} e acri solari \\
+SIZE, SIZE\_ACR & Dimensioni in unità simili ad AREA \\
+LAT\_MAX, LAT\_MIN, LON\_MAX, LON\_MIN & Estremi di latitudine e longitudine \\
+NPIX & Numero totale di pixel della patch \\
+OFFDISK & Pixel fuori dal disco solare (regione parzialmente invisibile) \\
+\hline
+\end{tabular}
+\caption[Dimensioni spaziali e localizzazione di regione attiva nei dati HARP]{Dimensioni spaziali e localizzazione della regione attiva.}
+\end{table}
+
+\subsubsection{Proprietà magnetiche}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+MNET & Campo magnetico netto \\
+MPOS\_TOT, MNEG\_TOT & Totale del campo positivo e negativo \\
+MTOT & Somma assoluta del campo magnetico \\
+MMEAN, MSTDEV & Media e deviazione standard \\
+MSKEW, MKURT & Skewness e curtosi del campo magnetico \\
+\hline
+\end{tabular}
+\caption[Proprietà magnetiche nei dati HARP]{Proprietà magnetiche derivate dai dati HARP.}
+\end{table}
+
+\newpage
+\subsubsection{Maschere e classificazione}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+ACTIVE & Flag: 1 se la regione è attiva \\
+NCLASS & Numero di classi di segmentazione \\
+MASK & Codice binario della maschera \\
+N\_PATCH, N\_PATCH1, N\_PATCHM & Numero di patch nel tempo \\
+ON\_PATCH & Immagini in cui la patch è visibile \\
+\hline
+\end{tabular}
+\caption[Maschere e classificazione nei dati HARP]{Maschere di segmentazione e classificazione associate.}
+\end{table}
+
+\subsubsection{Strumento e software}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+INSTRUME & Strumento: HMI\_COMBINED \\
+TELESCOP & Telescopio: Solar Dynamics Observatory (SDO) \\
+CAMERA & ID della camera \\
+BLD\_VERS, CODEVER* & Versioni software utilizzate \\
+CALVER64 & Versione di calibrazione \\
+POLCALM & Metodo di calibrazione polare \\
+\hline
+\end{tabular}
+\caption[Strumento e software nei dati HARP]{Strumentazione e software per l’elaborazione dei dati HARP.}
+\end{table}
+
+\subsubsection{Movimento del satellite}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{p{0.35\textwidth} p{0.6\textwidth}}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+OBS\_VN, OBS\_VR, OBS\_VW & Componenti del vettore velocità dell’osservatore (direzioni: Nord, Radiale, Ovest) \\
+\hline
+\end{tabular}
+\caption[Movimento del satellite nei dati HARP]{Componenti della velocità dell’osservatore rispetto al Sole.}
+\end{table}
+
+\subsubsection{Altri campi}
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+BUNIT & Unità fisiche dei dati \\
+QUALITY, QUALLEV1, ARM\_QUAL & Flag di qualità (0 = buono) \\
+COMMENT, HISTORY & Campi informativi (spesso “MISSING”) \\
+NOAA\_AR, NOAA\_ARS, NOAA\_NUM & ID regione attiva secondo NOAA \\
+ARM\_MODL, HRPDOCU, ARMDOCU & Modelli e documentazione associata \\
+T\_REC\_step, T\_REC\_unit & Informazioni temporali della serie \\
+\hline
+\end{tabular}
+\caption[Altri campi nei dati HARP]{Altri metadati informativi presenti nel gruppo HARP.}
+\end{table}
+
+\subsection{Metadati HARP di interesse}
+Come si può notare, ogni regione attiva ha decine di attributi.\\
+Tuttavia, quelli più significativi ai fini del lavoro di tesi sono:
+\FloatBarrier
+\begin{table}[H]
+\centering
+\begin{tabular}{p{0.35\textwidth} p{0.6\textwidth}}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+HARPNUM & Numero identificativo univoco della regione attiva solare (HARP) \\
+CRPIX1, CRPIX2 & Coordinate (in pixel) dell’angolo in basso a sinistra della regione nella CCD HMI \\
+CRSIZE1, CRSIZE2 & Larghezza e altezza (in pixel) del bounding box della regione attiva \\
+AREA & Area della regione proiettata sul disco solare, espressa in micro-emisferi solari \\
+MNET, MPOS\_TOT, MNEG\_TOT & Misure di campo magnetico integrato: netto, positivo totale e negativo totale \\
+T\_OBS & Data e ora dell’osservazione nel tempo TAI \\
+NOAA\_AR & Codice assegnato alla regione attiva nel catalogo NOAA, se disponibile \\
+\hline
+\end{tabular}
+\caption[Campi di interesse nei dati HARP]{Descrizione dei metadati principali utilizzati per identificare, localizzare e caratterizzare le regioni attive HARP nei magnetogrammi solari.}
+\label{tab:campi-harp}
+\end{table}
+
+
+La selezione dei campi elencati nella Tabella~\ref{tab:campi-harp} è stata guidata dalla necessità di estrarre, localizzare spazialmente e caratterizzare temporalmente le regioni attive solari (HARP), al fine di sviluppare un sistema automatico di rilevamento e tracciamento di flare. Di seguito si motivano le scelte effettuate.
+\begin{itemize}
+    \item \textbf{HARPNUM} è il codice univoco della regione attiva (HARP), usato come chiave primaria per il raggruppamento delle osservazioni successive nel tempo. È essenziale per costruire sequenze temporali coerenti da fornire a moduli di tracking multi-frame.
+    \item \textbf{CRPIX1, CRPIX2} e \textbf{CRSIZE1, CRSIZE2} definiscono il bounding box spaziale della regione all’interno del magnetogramma HMI. Queste coordinate sono utilizzate per contornare le regioni attive, le cui posizioni vengono convertite in coordinate normalizzate. Sono quindi fondamentali sia per la preparazione del dataset di addestramento che per il post-processing delle predizioni.
+    \item \textbf{AREA} fornisce una misura dell’estensione fisica della regione attiva, espressa in micro-emisferi solari. Questo campo può essere usato per filtrare le regioni troppo piccole o rumorose, che spesso non sono associabili a eventi di flare significativi, oppure come feature addizionale nei modelli di classificazione dell’attività magnetica.
+    \item \textbf{MNET}, \textbf{MPOS\_TOT} e \textbf{MNEG\_TOT} rappresentano l’integrazione spaziale del campo magnetico lungo la regione, rispettivamente netto, positivo totale e negativo totale. Queste grandezze costituiscono variabili fisiche utili per quantificare la complessità magnetica e sono candidate ideali per esperimenti di correlazione con eventi di flare osservati.
+    \item \textbf{T\_OBS} è il timestamp dell’osservazione, espresso in TAI. È impiegato per ordinare cronologicamente i dati all’interno di ciascun HARPNUM, ma anche per effettuare l’allineamento temporale tra HARP e cataloghi esterni (es. flare NOAA, GOES), con una precisione inferiore al minuto.
+    \item \textbf{NOAA\_AR} consente, quando disponibile, di associare la regione HARP a una regione attiva riconosciuta ufficialmente dal NOAA. Questo collegamento permette di etichettare automaticamente le regioni con eventi di flare registrati nei cataloghi pubblici NOAA/GOES, utile sia per la validazione che per la supervisione debole nei modelli deep learning.
+\end{itemize}
+L’insieme di questi metadati consente di costruire un dataset strutturato e annotato, in cui ogni regione attiva è localizzata, descritta magneticamente e tracciata nel tempo, con possibilità di associare ground truth fisiche (flare, classi magnetiche) per l’addestramento e la valutazione di modelli di detection e forecasting.
+
+\subsection{Esempio visivo di file utilizzato}
+Grazie a un lettore di file in formato \texttt{.h5}, è stato possibile esplorare la struttura interna dei dati HARP.\\
+Come riferimento è stato preso il dato \texttt{hmi\_magnetogram\_2014-06-10\_00-00-00.h5}.
+
+\subsubsection{Gruppo harp/metadata}
+All'interno di tale gruppo, è stata presa in considerazione la regione attiva \texttt{HARP\_4186}. In modalità Inspection, è possibile osservare l'elenco degli attributi spiegati in precedenza.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_1.png}
+    \caption[Esempio metadata 1]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_2.png}
+    \caption[Esempio metadata 2]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_3.png}
+    \caption[Esempio metadata 3]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_4.png}
+    \caption[Esempio metadata 4]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_5.png}
+    \caption[Esempio metadata 5]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_6.png}
+    \caption[Esempio metadata 6]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_7.png}
+    \caption[Esempio metadata 7]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_8.png}
+    \caption[Esempio metadata 8]{Esempio di struttura dei metadata}
+\end{figure}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_metadata_9.png}
+    \caption[Esempio metadata 9]{Esempio di struttura dei metadata}
+\end{figure}
+
+\subsubsection{Gruppo magnetogram}
+Visualizziamo in modalità display data.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/esempio_magnetogramma.png}
+    \caption{Esempio di magnetogramma}
+\end{figure}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+
+
+
