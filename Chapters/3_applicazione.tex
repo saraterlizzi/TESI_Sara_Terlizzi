@@ -1,0 +1,321 @@
+\chapter{Applicazione realizzata}
+\label{cap:3}
+Nel presente capitolo, sarà descritta dettagliatamente l'intera architettura software del sistema sviluppato. L'analisi si concentrerà sulle scelte implementative che hanno permesso di trasformare un framework di Object Detection generico in uno strumento utilizzabile in presenza di dati astrofisici. In particolare, saranno illustrate le modifiche apportate al codice sorgente di YOLOv7 per renderlo compatibile con il formato dei magnetogrammi, assieme al modo in cui sono state integrate le librerie ausiliarie per realizzare effettivamente il processo di predizione.
+
+\section{Adattamento del modello YOLOv7}
+Per poter utilizzare un modello preesistente come YOLOv7 nel dominio dell'astrofisica solare, il primo passo necessario è stato quello di creare un metodo che permettesse al framework di leggere e di interpretare un formato di dati per cui non è stato progettato. Quindi, in questa sezione, saranno esplicitate tutte le modifiche tecniche apportate a livello pratico al codice sorgente, in modo da superare questa limitazione e rendere il modello nella sua interezza compatibile con i dati scientifici HARP.
+\subsection{Implementazione di un Data Loader per Dati Scientifici}
+Come ampiamente anticipato, YOLOv7 è progettato per operare su un dataset di immagini tradizionali (es. \texttt{JPEG, PNG}), le cui annotazioni sono fornite in semplici formati di testo, in cui ogni riga contiene classe e coordinate normalizzate della bounding box. I dati HARP, invece, presentano una complessità strutturale che ne impedisce l'utilizzo diretto, data da:
+\begin{itemize}
+    \item \textbf{Formato contenitore:} i dati sono racchiusi da un formato \texttt{HDF5} (\texttt{.h5}), ovvero un file system gerarchico pensato per dati scientifici. All'interno del singolo file, i dati sono suddivisi in gruppi distinti e non solo come una semplice immagine.
+    \item \textbf{Annotazioni implicite:} le coordinate delle bounding box non sono fornite esplicitamente, bensì è necessaria l'estrazione, partendo dagli attributi incastonati nella gerarchia del file.
+\end{itemize}
+Per superare l'incompatibilità tra le parti, è stato implementato \textit{ex novo} lo script\\
+\texttt{utils/dataset\_h5.py}, il quale agisce come \textit{traduttore specializzato} tra il formato specifico e l'input standard. Tale compito è eseguito dalla \textbf{classe DatasetH5}, che esegue una sequenza di operazioni per ogni file richiesto durante la fase di training e testing:
+\begin{enumerate}
+    \item \textbf{Accesso e navigazione.} Inizialmente, la classe apre il file e ne esplora la struttura interna; accede al percorso \texttt{/magnetogram/data} per estrarre la matrice 2D, che rappresenta l'immagine grezza del magnetogramma solare.
+    \item \textbf{Parsing dei metadati.} Successivamente, la logica si sposta sul percorso \texttt{/harp/metadata}, in cui itera sui sottogruppi disponibili, ognuno dei quali rappresenta una singola regione attiva; quindi, cerca e legge i valori dei quattro attributi chiave: 
+    \begin{itemize}
+        \item \texttt{CRPIX1} e \texttt{CRPIX2}: coordinate x e y del pixel di riferimento della regione
+        \item \texttt{CRSIZE1} e \texttt{CRSIZE2}: larghezza e altezza in pixel della regione.
+    \end{itemize}
+    \item \textbf{Conversione Matematica e Normalizzazione.} Dopo aver ottenuto i suddetti valori, la classe esegue una "conversione matematica" per ottenere il formato richiesto. Trasforma le coordinate del sistema da un tipo \textit{"punto di origine + dimensioni"} ad un sistema del tipo \textit{"centro + dimensioni"}. Dopodiché, viene eseguita una normalizzazione: ogni coordinata calcolata è divisa per le dimensioni totali dell'immagine per poter far rientrare tutti i valori nell'intervallo appropriato.
+    \item \textbf{Conversione in tensori.} Infine, la classe prende sia la matrice dell'immagine che le coordinate elaborate e le converte in tensori PyTorch, che rappresentano il formato universale per le reti neurali.
+\end{enumerate}
+Quanto descritto è stato fondamentale per l'intero progetto: i dati scientifici sono stati utilizzati come se fossero immagini.
+Di seguito, è riportato il codice sorgente dello script.\\
+
+\begin{lstlisting}[language=Python,caption={[dataset\_h5.py]Implementazione commentata della classe \texttt{DatasetH5}. Ogni riga di codice e' accompagnata da una spiegazione per illustrare in dettaglio il processo di caricamento, validazione e pre-elaborazione dei dati dei magnetogrammi.},label={lst:dataset_h5_commentato}]
+# File: dataset_h5.py
+
+# --- BLOCCO IMPORTAZIONI ---
+# Importa le librerie necessarie.
+
+import torch # Libreria principale di PyTorch 
+from torch.utils.data import Dataset # Importa la classe base 'Dataset' da PyTorch, che sara' adattata.
+import h5py # Libreria per leggere e scrivere file HDF5.
+import numpy as np # Libreria per la manipolazione di dati matematici.
+import cv2 # Libreria OpenCV, usata qui per il ridimensionamento delle immagini.
+import os # Libreria per interagire con il sistema operativo, usata per costruire percorsi di file.
+import glob # Libreria per trovare file che corrispondono a un certo percorso.
+from tqdm import tqdm # Libreria per monitorare i cicli di training.
+
+# --- DEFINIZIONE DELLA CLASSE DATASETH5 ---
+# Essa eredita dalla classe 'Dataset' di PyTorch e definisce come caricare e accedere ai dati.
+class DatasetH5(Dataset):
+    # --- METODO COSTRUTTORE (`__init__`) ---
+    # Eseguito una sola volta, quando si crea un'istanza della classe.
+    # Prepara tutti i dati in anticipo (caching) per rendere l'accesso successivo molto veloce.
+    def __init__(self, path, img_size=640, clip_range=(-1500, 1500)):
+        self.img_size = img_size # Salva la dimensione a cui verranno ridimensionate tutte le immagini (es. 640x640 pixel).
+        self.clip_min, self.clip_max = clip_range # Estrae e salva i valori di minimo e di massimo per il "clipping" dei dati del magnetogramma.
+        self.class_id = 0 # Assegna un ID di classe fisso (0) a tutte le etichette.
+        
+        # Cerca tutti i file che finiscono con .h5 nella cartella specificata nel path, li ordina e li salva.
+        self.h5_files = sorted(glob.glob(os.path.join(path, '*.h5')))
+        self.n = len(self.h5_files) # Conta e salva il numero totale di file trovati.
+
+        self.labels = [] # Inizializza una lista vuota che conterra' le etichette per ogni bounding box.
+        self.shapes = [] # Inizializza una lista vuota che conterra' le dimensioni originali di ogni immagine.
+        
+        print(f"Caching and validating labels & shapes from {len(self.h5_files)} files...")
+        bad_labels_count = 0 # Inizializza un contatore per le etichette corrotte che verranno scartate.
+        
+        # Inizia un ciclo su tutti i file .h5 trovati, usando 'tqdm' per mostrare l'avanzamento.
+        for h5_path in tqdm(self.h5_files, desc=f"Loading metadata from {path}"):
+            try: # Inizia un blocco 'try', che permette di gestire eventuali errori senza far crashare il programma.
+                # Apre il file HDF5 corrente in modalita' lettura ('r'). Il 'with' garantisce che il file venga chiuso automaticamente.
+                with h5py.File(h5_path, 'r') as f:
+                    # Accede al file del magnetogramma all'interno dell' .h5.
+                    magnetogram_data = f['magnetogram/data']
+                    # Legge le dimensioni (altezza, larghezza) dell'immagine originale.
+                    orig_h, orig_w = magnetogram_data.shape
+                    # Aggiunge le dimensioni originali alla lista 'self.shapes'.
+                    self.shapes.append([orig_h, orig_w])
+
+                    # Accede al gruppo che contiene i metadati delle regioni attive (HARP).
+                    harp_group = f['harp/metadata']
+                    image_labels = [] # Inizializza una lista temporanea per le etichette di ogni zona HARP presente nel file.
+                    
+                    # Inizia un ciclo su ogni regione HARP trovata nei metadati.
+                    for harp_id in harp_group:
+                        # Accede agli attributi (informazioni) di una specifica regione HARP.
+                        harp_attrs = harp_group[harp_id].attrs
+                        
+                        # Definisce le chiavi necessarie per definire una bounding box.
+                        required_keys = ['CRPIX1', 'CRPIX2', 'CRSIZE1', 'CRSIZE2']
+                        # Controlla se TUTTE le chiavi necessarie sono presenti. Se ne manca anche solo una...
+                        if not all(key in harp_attrs for key in required_keys):
+                            continue # ...salta al prossimo ciclo, ignorando questa etichetta incompleta.
+
+                        # +++ INIZIO BLOCCO DI CONTROLLO +++
+                        # Controlliamo che i dati siano validi PRIMA di usarli per evitare errori.
+                        
+                        # Legge la larghezza della bounding box in pixel. 'float()' la converte in numero decimale.
+                        w_abs = float(harp_attrs['CRSIZE1'])
+                        # Legge l'altezza della bounding box in pixel.
+                        h_abs = float(harp_attrs['CRSIZE2'])
+
+                        # Se la larghezza o l'altezza sono zero o negative, la bounding box non ha senso.
+                        if w_abs <= 0 or h_abs <= 0:
+                            bad_labels_count += 1 # Incrementa il contatore delle etichette scartate.
+                            continue # Salta al prossimo ciclo, ignorando questa etichetta corrotta.
+
+                        # Calcola la coordinata x del centro della box e la normalizza (la porta in un range 0-1).
+                        x_center_norm = float(harp_attrs['CRPIX1']) / orig_w
+                        # Calcola la coordinata y del centro della box e la normalizza.
+                        y_center_norm = float(harp_attrs['CRPIX2']) / orig_h
+                        # Calcola la larghezza della box e la normalizza rispetto alla larghezza dell'immagine.
+                        width_norm = w_abs / orig_w
+                        # Calcola l'altezza della box e la normalizza rispetto all'altezza dell'immagine.
+                        height_norm = h_abs / orig_h
+
+                        # Controlla che il centro della box sia effettivamente DENTRO l'immagine (coordinate tra 0 e 1).
+                        if not (0.0 < x_center_norm < 1.0 and 0.0 < y_center_norm < 1.0):
+                                bad_labels_count += 1 # Se e' fuori, la scarta e incrementa il contatore.
+                                continue # Salta al prossimo ciclo.
+                        # +++ FINE BLOCCO DI CONTROLLO +++
+
+                        # Se tutti i controlli sono superati, aggiunge l'etichetta valida alla lista.
+                        image_labels.append([self.class_id, x_center_norm, y_center_norm, width_norm, height_norm])
+                    
+                    # Dopo aver controllato tutte le zone HARP, aggiunge le etichette trovate per questa immagine alla lista principale 'self.labels'.
+                    # Se 'image_labels' non e' vuota, la converte in un array NumPy.
+                    # Se e' vuota (nessuna etichetta valida trovata), crea un array NumPy vuoto con la forma corretta (0 righe, 5 colonne).
+                    self.labels.append(np.array(image_labels, dtype=np.float32) if image_labels else np.empty((0, 5), dtype=np.float32))
+
+            except Exception as e: # Se si verifica un qualsiasi errore grave durante la lettura del file (es. file corrotto)...
+                print(f"Errore grave durante la lettura del file {h5_path}: {e}") # ...stampa un messaggio di errore.
+                self.labels.append(np.empty((0, 5), dtype=np.float32)) # Aggiunge un'etichetta vuota per mantenere la corrispondenza degli indici.
+                self.shapes.append([0, 0]) # Aggiunge una forma (0,0) per mantenere la corrispondenza.
+
+        # Dopo aver processato tutti i file, se sono state trovate etichette corrotte...
+        if bad_labels_count > 0:
+            # ...stampa un avviso riassuntivo per l'utente.
+            print(f"ATTENZIONE: Trovate e scartate {bad_labels_count} etichette corrotte (es. dimensioni zero/negative o fuori dall'immagine).")
+
+        # Converte la lista di liste 'self.shapes' in un unico array NumPy per un accesso piu' efficiente.
+        self.shapes = np.array(self.shapes, dtype=np.float64)
+
+    # --- METODO `__len__` ---
+    # Metodo richiesto da PyTorch che restituisce la dimensione totale del dataset.
+    def __len__(self):
+        return self.n # Restituisce il numero di file che abbiamo contato all'inizio.
+
+    # --- METODO `__getitem__` ---
+    # Metodo fondamentale. Viene chiamato ogni volta che si chiede un elemento del dataset (es. `dataset[i]`).
+    # Si occupa di leggere UNA immagine, pre-elaborarla e restituirla insieme alle sue etichette.
+    def __getitem__(self, index):
+        # Ottiene il percorso del file .h5 corrispondente all'indice richiesto.
+        h5_path = self.h5_files[index]
+        # Prende le etichette pre-calcolate per questo indice e le converte in un tensore di PyTorch.
+        labels_tensor = torch.from_numpy(self.labels[index])
+        
+        # Apre il file HDF5 corrispondente in modalita' lettura.
+        with h5py.File(h5_path, 'r') as f:
+            # Legge TUTTI i dati del magnetogramma e li carica in memoria come array NumPy. L'uso di [:] e' cruciale.
+            data = f['magnetogram/data'][:]
+
+            # +++ CONTROLLO NAN/INF +++
+            # A volte i dati scientifici possono contenere valori corrotti come 'NaN' (Not a Number) o 'inf' (infinito).
+            # Questo blocco li neutralizza per evitare errori di calcolo.
+            
+            # Controlla se nell'array 'data' e' presente almeno un valore 'NaN' o 'inf'.
+            if np.isnan(data).any() or np.isinf(data).any():
+                # Se si', sostituisce tutti i NaN, +inf e -inf con 0.0.
+                data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+            # +++ FINE CONTROLLO +++
+            
+            # "Clipping": forza tutti i valori dell'array nell'intervallo [min, max] definito all'inizio.
+            clipped_data = np.clip(data, self.clip_min, self.clip_max)
+            # Normalizzazione Min-Max: scala i valori "clippati" in un range da 0.0 a 1.0.
+            normalized_data = (clipped_data - self.clip_min) / (self.clip_max - self.clip_min)
+            # Ridimensiona l'immagine normalizzata alla dimensione richiesta (640x640), usando un'interpolazione lineare.
+            resized_image = cv2.resize(normalized_data, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            # Converte l'immagine da 1 canale (scala di grigi) a 3 canali, duplicando il canale 3 volte.
+            # Questo e' necessario per usare modelli pre-allenati su immagini a colori (RGB).
+            image_rgb = np.stack([resized_image] * 3, axis=-1)
+            
+        # Converte l'immagine finale in un tensore di PyTorch.
+        # .transpose(2, 0, 1) cambia l'ordine delle dimensioni da (Altezza, Larghezza, Canali) a (Canali, Altezza, Larghezza),
+        # che e' il formato richiesto da PyTorch. .float() lo converte in formato decimale a 32 bit.
+        image_tensor = torch.from_numpy(image_rgb.transpose(2, 0, 1)).float()
+        
+        # Restituisce il tensore dell'immagine, il tensore delle etichette, il percorso del file e le dimensioni originali.
+        return image_tensor, labels_tensor, h5_path, self.shapes[index]
+\end{lstlisting}
+
+\subsection{Integrazione del Data Loader nella Logica di Training}
+La creazione di un data loader personalizzato è un passo necessario, ma non sufficiente per il completo riadattamento del modello, bensì necessita di essere integrato nel flusso di lavoro. Per questo motivo, la decisione più adeguata è stata quella di intervenire direttamente sul codice sorgente di YOLOv7, in particolare su quegli script che sono responsabili dell'addestramento e della validazione del modello.
+
+\subsubsection{Adattamento della Logica di Training}
+La creazione del nuovo Data Loader ha richiesto alcune modifiche allo script \texttt{train.py}, che rappresenta il motore del processo di training. L'obiettivo principale era quello di permettere al modello di scegliere dinamicamente quale loader utilizzare -quello di default per immagini standard o quello personalizzato per i dati HDF5- senza alterare la logica del ciclo di addestramento. Per ottenere ciò, sono state apportate le seguenti modifiche:
+\begin{itemize}
+    \item \textbf{Aggiunta di un nuovo argomento al Parser} Per prima cosa, è stato aggiunto, al parser degli argomenti \texttt{argparse}, un nuovo valore booleano denominato \texttt{-{}-h5}, per poter attivare la modalità di caricamento per i dati scientifici direttamente da riga di comando al momento di avvio del training (es. \texttt{python train.py -{}-h5}).
+    \begin{lstlisting}[language=Python, caption={[Aggiunta di un nuovo argomento al Parser di train.py] Definizione dell'argomento opzionale `-{}-h5` per l'attivazione del data loader personalizzato.}, label={lst:argparse_h5}]
+# Definisce un nuovo argomento opzionale per la riga di comando chiamato '--h5'.
+# Questo argomento agisce come un interruttore booleano (flag).
+parser.add_argument(
+    '--h5',                # Il nome del flag che l'utente usera' nel terminale.
+    action='store_true',   # Imposta il comportamento: se il flag e' presente, il valore e' True, altrimenti e' False
+    help='load *.h5 dataset' # La descrizione mostrata nel messaggio di aiuto (--help).
+)
+\end{lstlisting}
+    \item \textbf{Importazione condizionale} È stata importata la classe \texttt{DatasetH5} dallo script \texttt{utils/dataset\_h5.py}, in modo da renderla disponibile al momento della creazione del dataset.
+    \begin{lstlisting}[language=Python, caption={[Importazione condizionale in train.py] Importazione della classe \texttt{DatasetH5} personalizzata.}, label={lst:import_dataset_h5}]
+# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
+from utils.dataset_h5 import DatasetH5
+\end{lstlisting}
+    \item \textbf{Iniezione della logica di caricamento dati} Il cambiamento più significativo è avvenuto nella sezione in cui è creato l'oggetto \texttt{dataset}, grazie all'inserimento di una struttura condizionale \texttt{if-else} che controlla il valore dell'opzione \texttt{-{}-h5}: 
+    \begin{itemize}
+        \item se attivata, lo script ignora il loader di default \texttt{LoadImagesAndLabels} e istanzia la classe \texttt{DatasetH5}, passandole i parametri necessari (es. percorso ai dati, dimensione di immagini); 
+        \item se disattivata, lo script maniene il suo comportamento originale.
+    \end{itemize}
+    \begin{lstlisting}[language=Python, caption={[Iniezione della logica di caricamento dati in train.py] Logica condizionale per la selezione dinamica del data loader in \texttt{train.py}.}, label={lst:dataloader_choice}]
+# Controlla se l'opzione '--h5' e' stata attivata dalla riga di comando.
+if opt.h5:
+    # Se opt.h5 e' True, crea un'istanza del data loader personalizzato per i file HDF5.
+    dataset = DatasetH5(
+        train_path,      # Passa il percorso alla cartella contenente i file .h5.
+        img_size=imgsz   # Passa la dimensione a cui verranno ridimensionate le immagini.
+    )
+# Altrimenti, se l'opzione '--h5' non e' stata attivata...
+else:
+    # ...esegue il codice originale, creando un'istanza del data loader di default di YOLOv7.
+    dataset = LoadImagesAndLabels(
+        train_path,          
+        imgsz,               
+        batch_size,          
+        augment=True,        
+        hyp=hyp,             
+        rect=opt.rect,       
+        cache_images=opt.cache_images, 
+        single_cls=opt.single_cls,    
+        stride=int(stride),  
+        pad=0.0,             
+        image_weights=opt.image_weights, 
+        prefix=colorstr('train: ')     
+    )
+\end{lstlisting}
+\end{itemize}
+L'approccio appena descritto ed adottato per lo scopo è noto come \textit{feature flagging}: si tratta di una tecnica di sviluppo software che permette -all'occorrenza- di attivare/disattivare funzionalità specifiche di un'applicazione senza dover modificare il codice sorgente per intero, ma solo in modo mirato. In questo modo, è stato possibile estendere la funzionalità di YOLOv7 in modo modulare, rimanendo coerente al funzionamento originale e garantendo che la nuova logica sia eseguita solo quando esplicitamente richiesto.
+
+\subsubsection{Estensione della Logica di Validation}
+Per mantenere una coerenza all'interno del modello e per garantire che non ci siano conflitti in fase di validazione, è stato necessario apportare modifiche analoghe a quelle viste poco fa anche allo script \texttt{test.py}. Un modello addestrato deve necessariamente essere validato utilizzando lo stesso processo di caricamento e pre-elaborazione. Per questo motivo, sono state effettuate alcune modifiche speculari rispetto a quelle apportate in \texttt{train.py}:
+\begin{itemize}
+    \item \textbf{Aggiunta di un nuovo argomento al Parser} Analogamente allo script di training, al parser degli argomenti \texttt{argparse}, è stato aggiunto il flag booleano \texttt{-{}-h5}, per poter attivare la modalità di caricamento per i dati scientifici direttamente da riga di comando al momento di avvio del testing.
+    \begin{lstlisting}[language=Python, caption={[Aggiunta di un nuovo argomento al Parser in test.py] Definizione dell'argomento opzionale per l'attivazione della modalità HDF5.}, label={lst:h5_arg}]
+# Aggiunge l'argomento opzionale '--h5' alla riga di comando; se presente, agisce 
+# come un interruttore (flag) impostando il suo valore a True.
+parser.add_argument('--h5', action='store_true', help='load *.h5 dataset')
+\end{lstlisting}
+    \item \textbf{Importazione condizionale} È stata aggiunta l'istruzione per importare la classe \texttt{DatasetH5} dallo script \texttt{utils/dataset\_h5.py}, in modo da renderla disponibile nello script di validazione.
+    \begin{lstlisting}[language=Python, caption={[Importazione condizionale in test.py] Importazione della classe \texttt{DatasetH5} personalizzata.}, label={lst:import_dataset_h5_2}]
+# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
+from utils.dataset_h5 import DatasetH5
+\end{lstlisting}
+    \item \textbf{Iniezione della logica di caricamento dati} Il cambiamento più significativo è avvenuto con la creazione dell'oggetto \texttt{dataset}, grazie all'inserimento di una struttura condizionale \texttt{if-else} che controlla il valore dell'opzione \texttt{-{}-h5}: 
+    \begin{itemize}
+        \item se attivata, è istanziata la classe \texttt{DatasetH5} per caricare i dati di validazione; 
+        \item se disattivata, lo script mantiene il comportamento originale, utilizzando la classe di default \texttt{LoadImagesAndLabels}.
+    \end{itemize}
+    \begin{lstlisting}[language=Python, caption={[Iniezione della logica di caricamento dati in test.py] Selezione condizionale del data loader nello script \texttt{test.py}.}, label={lst:test_dataloader}]
+# Controlla se l'opzione '--h5' e' stata attivata dalla riga di comando.
+if opt.h5:
+    # Se True, crea un'istanza del dataset personalizzato per i file HDF5.
+    dataset = DatasetH5(
+        opt.data,            # Passa il percorso ai dati scientifici.
+        img_size=imgsz_test  # Passa la dimensione a cui ridimensionare le immagini per il test.
+    )
+    # Crea un DataLoader standard di PyTorch, che gestira' il caricamento dei dati in batch.
+    dataloader = torch.utils.data.DataLoader(
+        dataset,             # Il dataset personalizzato da cui pescare i dati.
+        batch_size=batch_size, # Il numero di immagini da caricare in ogni batch.
+        num_workers=workers  # Il numero di processi paralleli da usare per il caricamento dati.
+    )
+# Altrimenti, se l'opzione '--h5' non e' stata attivata...
+else:
+    # ...esegue la funzione originale di YOLOv7 per creare il dataloader per dati standard.
+    dataloader = create_dataloader(
+        img_path,            
+        imgsz_test,          
+        batch_size,          
+        gs,                  
+        opt,                 
+        pad=0.5,             
+        rect=True,           
+        prefix=colorstr('val: ') 
+    )[0]                     
+\end{lstlisting}
+\end{itemize}
+
+\subsubsection{Personalizzazione delle Utility di Visualizzazione}
+L'ultimo passo dell'adattamendo del framework è stata inerente alla visualizzazione corretta dei risultati. Le funzioni di plotting standard di YOLOv7, contenute nel modulo \texttt{utils/plots.py}, sono state progettate per operare su immagini a tre canali (BGR). Tuttavia, i magnetogrammi sono immagini a singolo canale, in cui ogni pixel ha un valore di intensità. Applicare direttamente la funzione originale a questi dati avrebbe comportato una visualizzazione non corretta dal punto di vista cromatico, o anche un errore. Per risolvere tale problema, è stata modificata la funzione \texttt{plot\_images}, introducendo una \textit{logica condizionale} che ispeziona le dimensioni del tensore dell'immagine in input:
+\begin{itemize}
+    \item \textbf{Caso standard - 3 canali (BGR)} In presenza di un'immagine a 3 canali, lo script mantiene il comportamento originale, effettuando la conversione da BGR a RGB.
+    \item \textbf{Caso personalizzato - 1 canale} In presenza di un'immagine a singolo canale, la logica è la seguente:
+    \begin{itemize}
+        \item Rimuove la dimensione del canale mediante comando \texttt{squeeze()}, trasformando il tensore in una matrice 2D.
+        \item Utilizza la libreria \texttt{matplotlib} per visualizzare la matrice come un'immagine in scala di grigi (\texttt{cmap='gray'}).
+    \end{itemize}
+\end{itemize}
+\begin{lstlisting}[language=Python, caption={[Personalizzazione delle Utility di Visualizzazione in plots.py] Logica condizionale per la visualizzazione di immagini a singolo canale (scientifiche) e a tre canali (standard).}, label={lst:plot_logic}]
+# Controlla se la prima dimensione del tensore dell'immagine e' 1 (ovvero, se ha un solo canale).
+if img.shape[0] == 1:
+    # --- Blocco per immagini a singolo canale ---
+    
+    # Converte l'array NumPy dell'immagine in un tensore di PyTorch.
+    im = torch.from_numpy(img)
+    
+    # Disegna l'immagine usando matplotlib:
+    # im.squeeze(0) rimuove la dimensione del canale (da [1, H, W] a [H, W]), necessaria per imshow.
+    # cmap='gray' imposta la mappa di colori in scala di grigi, corretta per dati scientifici.
+    plt.imshow(im.squeeze(0), cmap='gray')
+
+# Altrimenti, se l'immagine ha piu' di un canale (si assume 3 canali).
+else:
+    # Esegue la funzione originale di YOLOv7
+    img = img[..., ::-1].transpose(2, 0, 1)
+    img = np.ascontiguousarray(img)
+    im = torch.from_numpy(img)
+\end{lstlisting}

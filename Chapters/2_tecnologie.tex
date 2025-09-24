@@ -4,6 +4,7 @@
 Nel presente capitolo sono descritte le principali tecnologie e metodologie adottate durante lo sviluppo del progetto.
 
 \section{Panoramica sull'Intelligenza Artificiale, l'Object Detection e le Bounding Box}
+Nel contesto del progetto di tesi, queste tecnologie sono state fondamentali: l'Intelligenza Artificiale ha permesso l'addestramento di un modello per un compito non usuale; l'Object Detection è stata la metodologia per localizzare le regioni attive nei magnetogrammi; le Bounding Box hanno rappresentato lo strumento pratico per delimitarle visivamente.
 
 \subsection{Intelligenza Artificiale}
 L'\textbf{Intelligenza Artificiale} (IA) è un campo dell'informatica che si propone di sviluppare sistemi in grado di svolgere attività tipicamente umane, quali ragionamento, apprendimento automatico, elaborazione del linguaggio naturale e percezione visiva\cite{russell2010artificial}.
@@ -81,7 +82,8 @@ Le possibili applicazioni dell'Object Detection, assieme all'utilizzo delle boun
 \end{itemize}
 
 \subsection{Conclusione}
-L'utilizzo combinato di IA, Object Detection e bounding box ha trasformato radicalmente il modo in cui le macchine percepiscono e interagiscono con il mondo visivo. I continui sviluppi in questo ambito promettono ulteriori miglioramenti in precisione, efficienza e applicabilità in scenari sempre più complessi.
+L'utilizzo combinato di IA, Object Detection e bounding box ha trasformato radicalmente il modo in cui le macchine percepiscono e interagiscono con il mondo visivo. I continui sviluppi in questo ambito promettono ulteriori miglioramenti in precisione, efficienza e applicabilità in scenari sempre più complessi.\\
+Nel contesto di questa tesi, esse sono state fondamentali: l'Intelligenza Artificiale ha permesso di addestrare un modello modificato ad hoc per un compito differente dal solito, l'Object Detection è stata la metodologia utilizzata per la localizzazione delle regioni attive nei magnetogrammi, mentre le Bounding Box sono stato lo strumento pratico per delimitarle visivamente.
 
 \section{Python}
 Python è un linguaggio di programmazione ad alto livello, ampiamente utilizzato per la sua:
@@ -97,7 +99,7 @@ Spicca come linguaggio per i suoi \textit{punti di forza}:
     \item Protipizzazione rapida.
     \item Presenza di una grande comunità di supporto
 \end{itemize}
-Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio principale per lo sviluppo degli script e l'esecuzione degli elaborazione dati, visione artificiale e deep learning.
+Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio principale per lo sviluppo degli script e l'esecuzione degli elaborazione dati, visione artificiale e deep learning. Si è rivelato essenziale per integrare le diverse componenti del sistema: dalla lettura dei dati scientifici HARP, alla pre-elaborazione delle immagini, fino all'addestramento ed inferenza del modello.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.4\textwidth]{Figs/Cap2/logo_python.png}
@@ -106,14 +108,14 @@ Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio 
 
 \subsection{Librerie ausiliarie}
 \begin{itemize}
-  \item \textbf{NumPy} \cite{numpy}: è la libreria fondamentale per il calcolo scientifico in Python. Fornisce strutture dati per la gestione di array multidimensionali e una innumerevoli funzioni matematiche per operazioni vettoriali e matriciali. Nel progetto, è stata utilizzata per la manipolazione e preparazione dei dati numerici.
-  \item \textbf{SciPy} \cite{scipy}: estende le funzionalità di NumPy, offrendo strumenti per operazioni matematiche avanzate come integrazione numerica, ottimizzazione, interpolazione e algebra lineare. Nel progetto, è stata utilizzata per supportare calcoli complessi durante l’analisi dei dati e l’elaborazione dei risultati.
-  \item \textbf{OpenCV} \cite{opencv}: libreria open source per la computer vision e l’elaborazione delle immagini. Offre algoritmi ottimizzati per operazioni di filtraggio, rilevamento di caratteristiche, trasformazioni geometriche e manipolazione delle immagini. Nel progetto, è stata usata per la pre-elaborazione e manipolazione dei magnetogrammi solari.
-  \item \textbf{Matplotlib} \cite{matplotlib}: libreria di visualizzazione dati che permette la creazione di grafici statici, animati e interattivi. Consente di rappresentare chiaramente e in modo personalizzabile i risultati ottenuti, facilitando l’analisi e la documentazione visiva dei dati elaborati.
+  \item \textbf{NumPy} \cite{numpy}: è la libreria fondamentale per il calcolo scientifico in Python. Fornisce strutture dati per la gestione di array multidimensionali e una innumerevoli funzioni matematiche per operazioni vettoriali e matriciali. Nel progetto, è stata utilizzata per la manipolazione e preparazione dei dati numerici dei magnetogrammi, rappresentati come array multidimensionali, e per gestire le coordinate delle bounding box durante le fasi di addestramento e validazione.
+  \item \textbf{SciPy} \cite{scipy}: estende le funzionalità di NumPy, offrendo strumenti per operazioni matematiche avanzate come integrazione numerica, ottimizzazione, interpolazione e algebra lineare. Nel progetto, è stata utilizzata per supportare calcoli complessi durante l’analisi dei dati e l’elaborazione dei risultati, in particolare ha fornito strumenti di supporto per analisi statistiche preliminari sulle proprietà magnetiche delle regioni attive descritte nei dati HARP.
+  \item \textbf{OpenCV} \cite{opencv}: libreria open source per la computer vision e l’elaborazione delle immagini. Offre algoritmi ottimizzati per operazioni di filtraggio, rilevamento di caratteristiche, trasformazioni geometriche e manipolazione delle immagini. Nel progetto, è stata usata in primis perché viene utilizzata dal modello, ma anche per la pre-elaborazione e manipolazione dei magnetogrammi solari come, ad esempio, la normalizzazione dei valori e la conversione dei formati, rendendoli idonei per l'input da passare al modello.
+  \item \textbf{Matplotlib} \cite{matplotlib}: libreria di visualizzazione dati che permette la creazione di grafici statici, animati e interattivi. Consente di rappresentare chiaramente e in modo personalizzabile i risultati ottenuti, facilitando l’analisi e la documentazione visiva dei dati elaborati. Nel progetto, è stata la libreria indispensabile per visualizzare i risultati, ad esempio per disegnare le bounding box predette direttamente sui magnetogrammi solari e per generare grafici che mostrano l'andamento delle performance del modello.
 \end{itemize}
 
 \section{Miniconda}
-Miniconda è una distribuzione minimale di Conda, un sistema di gestione degli ambienti e dei pacchetti Python. È stato utilizzato per creare ambienti isolati in cui installare versioni specifiche delle librerie necessarie, evitando conflitti di dipendenze e facilitando la riproducibilità degli esperimenti.
+Miniconda è una distribuzione minimale di Conda, un sistema di gestione degli ambienti e dei pacchetti Python. È stato utilizzato per creare ambienti isolati e riproducibili, in cui installare versioni specifiche delle librerie necessarie, garantendo che le specifiche versioni di PyTorch, CUDA e altre librerie fossero compatibili fra loro, evitando in questo modo conflitti che avrebbero potuto compromettere l'addestramento del modello.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.5\textwidth]{Figs/Cap2/miniconda_logo.jpg}
@@ -124,7 +126,8 @@ Miniconda è una distribuzione minimale di Conda, un sistema di gestione degli a
 Ogni ambiente può essere configurato con una propria versione di Python e delle librerie di terze parti, come PyTorch, NumPy, OpenCV, ecc. Questa gestione permette di isolare i progetti e mantenere sotto controllo le dipendenze \cite{miniconda}.
 
 \section{PyTorch}
-PyTorch è un framework open-source per il deep learning sviluppato da Meta AI. È stato utilizzato per l'esecuzione e l'addestramento dei modelli YOLOv7. PyTorch fornisce un'interfaccia dinamica e intuitiva per la definizione e l'ottimizzazione delle reti neurali, ed è particolarmente apprezzato per il suo supporto nativo all’accelerazione tramite GPU \cite{paszke2019pytorch}.
+PyTorch è un framework open-source per il deep learning sviluppato da Meta AI. Esso fornisce un'interfaccia dinamica e intuitiva per la definizione e l'ottimizzazione delle reti neurali, ed è particolarmente apprezzato per il suo supporto nativo all’accelerazione tramite GPU \cite{paszke2019pytorch}.\\
+In questo progetto di tesi, è stato il framework su cui si basa l'intero processo di addestramento ed inferenza del modello, offrendo la flessibilità desiderata e necessaria per apportare le modifiche atte all'adattamento del compito scientifico.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.3\textwidth]{Figs/Cap2/logo_pytorch.png}
@@ -132,7 +135,8 @@ PyTorch è un framework open-source per il deep learning sviluppato da Meta AI. 
 \end{figure}
 
 \section{CUDA}
-CUDA (Compute Unified Device Architecture) è una piattaforma di calcolo parallelo sviluppata da NVIDIA, che consente l’utilizzo delle GPU per compiti generici di calcolo. 
+CUDA (Compute Unified Device Architecture) è una piattaforma di calcolo parallelo sviluppata da NVIDIA, che consente l’utilizzo delle GPU per compiti generici di calcolo.\\
+Data l'enorme mole di dati e la complessità del modello utilizzato, l'accelerazione hardware è stata indispensabile per ridurre i tempi di addestramento, rendendo possibile l'esecuzione di più esperimenti in tempi alquanto ragionevoli.
 
 \subsection{Accelerazione hardware}
 Nel contesto di questa tesi, CUDA è stata utilizzata per velocizzare sia l’inferenza che l’addestramento dei modelli deep learning. La compatibilità tra la versione di CUDA e quella di PyTorch è essenziale per il corretto funzionamento dei modelli su GPU.\cite{cuda}.
@@ -144,7 +148,8 @@ Nel contesto di questa tesi, CUDA è stata utilizzata per velocizzare sia l’in
 
 \section{Norfair}
 \textbf{Norfair} è una libreria open source sviluppata in Python per il tracking multi-oggetto in tempo reale \cite{norfair}. Essa è progettata per integrarsi facilmente con qualsiasi sistema di rilevamento che fornisca coordinate spaziali (ad esempio le coordinate \((x, y)\) dei centri delle bounding box). \\
-La libreria si occupa esclusivamente della parte di tracking, ovvero dell'associazione temporale dei rilevamenti (\textit{detections}) frame per frame, mantenendo un identificatore univoco stabile per ogni oggetto monitorato nel video o nel flusso di immagini. Non include invece la componente di rilevamento, che deve essere fornita esternamente (ad esempio tramite modelli YOLO, Detectron2, MediaPipe, ecc.).
+La libreria si occupa esclusivamente della parte di tracking, ovvero dell'associazione temporale dei rilevamenti (\textit{detections}) frame per frame, mantenendo un identificatore univoco stabile per ogni oggetto monitorato nel video o nel flusso di immagini. Non include invece la componente di rilevamento, che deve essere fornita esternamente (ad esempio tramite modelli YOLO, Detectron2, MediaPipe, ecc.).\\
+Nel progetto sviluppato, svolge il ruolo chiave di "inseguire" le regioni attive nel tempo: una volta che YOLOv7 le ha identificate nel singolo magnetogramma, Norfair associa le rilevazioni tra frame consecutivi, dando la possibilità di studiare l'evoluzione di una specifica regione solare. 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.5\textwidth]{Figs/Cap2/logo_norfair.png}
@@ -197,10 +202,13 @@ In sintesi, Norfair rappresenta uno strumento flessibile e potente per il tracki
 \end{figure}
 
 \section{YOLOv7}
-\textbf{YOLOv7} (You Only Look Once version 7) è uno dei modelli più recenti e avanzati per il rilevamento oggetti in tempo reale, appartenente alla famiglia di algoritmi YOLO. Sviluppato per ottenere alte prestazioni sia in termini di accuratezza che di velocità, YOLOv7 si distingue per una serie di ottimizzazioni che lo rendono adatto ad innumerevoli applicazioni, anche su dispositivi con risorse computazionali limitate \cite{wang2022yolov7}.
+\textbf{YOLOv7} (You Only Look Once version 7) è uno dei modelli più recenti e avanzati per il rilevamento oggetti in tempo reale, appartenente alla famiglia di algoritmi YOLO. Sviluppato per ottenere alte prestazioni sia in termini di accuratezza che di velocità, YOLOv7 si distingue per una serie di ottimizzazioni che lo rendono adatto ad innumerevoli applicazioni, anche su dispositivi con risorse computazionali limitate \cite{wang2022yolov7}. \\
+La scelta di tale modello è motivata dall'ottimo compromesso tra velocità ed accuratezza in tempo reale, una caratteristica di non poco conto nell'analisi di grandi moli di dati astrofisici.
 
 \subsection{Caratteristiche principali}
-YOLOv7 è progettato per realizzare un pipeline \emph{end-to-end}, che riceve in input un’immagine e restituisce in output le bounding box e le classi associate agli oggetti rilevati. Le principali caratteristiche del modello includono:
+YOLOv7 è progettato per realizzare un pipeline \emph{end-to-end}, che riceve in input un’immagine e restituisce in output le bounding box e le classi associate agli oggetti rilevati. \\
+Si tratta del cuore del sistema di rilevamento sviluppato nel presente lavoro di tesi, dopo esser stato riadattato per analizzare i magnetogrammi e identidicare con elevata velocità e precisione la posizione e le dimensioni delle regioni attive, che rappresentano il primo passo per il successivo tracciamento.\\
+Le principali caratteristiche del modello includono:
 \begin{itemize}
   \item Elevata precisione nel rilevamento, mantenendo alte velocità di inferenza.
   \item Supporto per Object Detection, Instance Segmentation e Pose Estimation.
@@ -375,6 +383,7 @@ I dati HARP svolgono un ruolo fondamentale nello studio dell’attività solare,
     \item \textbf{Tracciamento temporale}: consente di seguire l’evoluzione di ciascuna regione attiva dal momento della sua comparsa fino alla sua scomparsa.
     \item \textbf{Quantificazione delle proprietà fisiche}: per ogni regione attiva vengono misurate caratteristiche quali superficie, intensità del campo magnetico (positivo e negativo), posizione sul disco solare e, se disponibile, il codice NOAA associato alla regione \cite{NSO_HARP}.
 \end{itemize}
+Per cui, è riduttivo dire che essi siano stati l'oggetto della tesi: sono stati fonte di "verità" per il progetto. Sono stati utilizzati per creare il dataset annotato, indispensabile per addestrare il modello YOLOv7 a riconoscere queste strutture automaticamente.
 
 \subsection{Origine e metodo di acquisizione}
 I dati HARP sono calcolati automaticamente a partire dalle osservazioni HMI, grazie a un algoritmo che individua le concentrazioni magnetiche e le aggrega in patch, ciascuna identificata da un codice univoco chiamato \texttt{HARPNUM} \cite{Bobra2014}. Quando una regione è riconosciuta anche dal NOAA (\textit{National Oceanic and Atmospheric Administration}), le viene assegnato il relativo codice NOAA, stabilendo una corrispondenza tra classificazione automatica e classificazione ufficiale.
@@ -475,7 +484,6 @@ MSKEW, MKURT & Skewness e curtosi del campo magnetico \\
 \caption[Proprietà magnetiche nei dati HARP]{Proprietà magnetiche derivate dai dati HARP.}
 \end{table}
 
-\newpage
 \subsubsection{Maschere e classificazione}
 \FloatBarrier
 \begin{table}[H]
