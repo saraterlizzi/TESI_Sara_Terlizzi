@@ -8,21 +8,18 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 
-\usepackage{float}
 \usepackage{placeins}
 
 \usepackage{lipsum}
 \usepackage{fancyhdr}
 \usepackage{graphicx}
-\usepackage{tikz}
 \usepackage{csquotes}
 \usepackage{float}
 \usepackage{listings}
 \usepackage{xcolor}
-\graphicspath{ {./images/} }
+\graphicspath{ {./Figs/} }
 \usepackage[hyperindex]{hyperref} %per l'indice interattivo
 \usepackage{caption}
-\usepackage{subcaption}
 \usepackage{chngcntr} % Per gestire la numerazione
 \hypersetup{
     colorlinks=true,
@@ -41,28 +38,9 @@
 \usepackage{subcaption}
 \usepackage{tikz}
 \usepackage{pgfplots}
-\usepackage{minted}
-\usepackage{fvextra}
 
-\setminted{
-    linenos,                           % Mostra i numeri di riga
-    frame=lines,                       % Aggiunge una cornice intorno al codice
-    bgcolor=lightgray!20,              % Sfondo grigio chiaro
-    fontsize=\footnotesize,            % Font leggermente più piccolo per il codice
-    breaklines=true,                   % Spezza automaticamente le righe lunghe
-    breakautoindent=true,              % Mantiene l'indentazione quando si spezza una riga
-    breaksymbol=\textcolor{red}{\tiny\ensuremath{\hookrightarrow}} % Simbolo per indicare spezzature
-}
-
-\renewcommand{\listoflistingscaption}{Elenco dei codici}
-% Ridefinisci il nome del contatore per i listing
-\renewcommand{\listingscaption}{Codice}
-
-% Numerazione in base al capitolo
-\counterwithin{listing}{chapter} % Numerazione relativa ai capitoli
-
-% Definizione del formato della numerazione
-\renewcommand{\thelisting}{\thechapter.\arabic{listing}}
+% Configurazione del pacchetto listings
+\renewcommand{\lstlistlistingname}{Elenco dei codici}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -89,6 +67,13 @@
 }
 \renewcommand\lstlistingname{Codice} % Cambia "Listing" in "Codice"
 \lstset{style=mystyle}
+
+% Configurazione numerazione dei listing (dopo \lstset)
+\AtBeginDocument{%
+  \counterwithin{lstlisting}{chapter}
+  \renewcommand{\thelstlisting}{\thechapter.\arabic{lstlisting}}
+}
+
 %\fancyhead[LE, RO]{\thepage}
 %%\fancyhead[RE]{\leftmark}
 %%\fancyhead[LO]{\leftmark}
@@ -199,7 +184,7 @@
     \tableofcontents
     \listoffigures
     \listoftables
-    \listoflistings
+    \lstlistoflistings
     \cleardoublepage
     \pagestyle{fancy}
     \pagenumbering{arabic} % Inizia la numerazione delle pagine in numeri arabi
