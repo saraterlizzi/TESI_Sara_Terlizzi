@@ -46,7 +46,6 @@ Per superare l'incompatibilità tra le parti, è stato implementato \textit{ex n
         \end{enumerate}
         \item \textbf{Gestione dell'Errore}: Se una qualsiasi operazione sul file fallisce, viene cattura l'eccezione. Piuttosto che interrompere l'intero training, lo script stampa a video un avviso con il nome del file problematico e restituisce un tensore  di zeri (corrispondente ad un'immagine nera).
     \end{enumerate}
-\end{itemize}
 La struttura così descritta rende l'intero processo efficiente in termini di tempo e robusto in caso di errori nel dataset. Il tutto è stato fondamentale per l'intero progetto: i dati scientifici sono stati utilizzati come se fossero immagini.\\
 Di seguito, è riportato il codice sorgente dello script.\\
 
