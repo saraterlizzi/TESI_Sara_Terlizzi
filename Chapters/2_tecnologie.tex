@@ -167,7 +167,7 @@ Il funzionamento di Norfair si basa sui seguenti \textit{concetti chiave}:
 Ad ogni nuovo fotogramma, Norfair riceve l’elenco delle detections, aggiorna le tracce esistenti o ne crea di nuove e rimuove quelle non aggiornate per un certo numero di frame, garantendo così un tracking coerente anche in presenza di occlusioni temporanee o movimenti rapidi.
 
 \subsection{Struttura del progetto}
-La struttura della ripository ufficiale della libreria Norfair (\url{https://github.com/tryolabs/norfair}) è organizzata come segue:
+La struttura della repository ufficiale della libreria Norfair (\url{https://github.com/tryolabs/norfair}) è organizzata come segue:
 \begin{itemize}
   \item \texttt{norfair/}: codice sorgente principale della libreria che implementa la logica di tracking (\texttt{tracker.py}), la gestione di flussi video e visualizzazione dei risultati (\texttt{video.py}) e le metriche di valutazione di prestazioni di tracking ad esempio accuratezza e precisione (\texttt{metrics.py}).
   \item \texttt{demos/}: esempi pratici di integrazione con vari rilevatori come YOLOv5 e Detectron2, che facilitano l’utilizzo in scenari reali.
@@ -383,7 +383,7 @@ I dati HARP svolgono un ruolo fondamentale nello studio dell’attività solare,
     \item \textbf{Tracciamento temporale}: consente di seguire l’evoluzione di ciascuna regione attiva dal momento della sua comparsa fino alla sua scomparsa.
     \item \textbf{Quantificazione delle proprietà fisiche}: per ogni regione attiva vengono misurate caratteristiche quali superficie, intensità del campo magnetico (positivo e negativo), posizione sul disco solare e, se disponibile, il codice NOAA associato alla regione \cite{NSO_HARP}.
 \end{itemize}
-Per cui, è riduttivo dire che essi siano stati l'oggetto della tesi: sono stati fonte di "verità" per il progetto. Sono stati utilizzati per creare il dataset annotato, indispensabile per addestrare il modello YOLOv7 a riconoscere queste strutture automaticamente.
+Pertanto, considerare i dati HARP come semplice oggetto della tesi sarebbe riduttivo: essi sono stati \textit{fonte di "verità"} per il progetto. Sono stati utilizzati per creare il dataset annotato, indispensabile per addestrare il modello YOLOv7 a riconoscere queste strutture automaticamente.
 
 \subsection{Origine e metodo di acquisizione}
 I dati HARP sono calcolati automaticamente a partire dalle osservazioni HMI, grazie a un algoritmo che individua le concentrazioni magnetiche e le aggrega in patch, ciascuna identificata da un codice univoco chiamato \texttt{HARPNUM} \cite{Bobra2014}. Quando una regione è riconosciuta anche dal NOAA (\textit{National Oceanic and Atmospheric Administration}), le viene assegnato il relativo codice NOAA, stabilendo una corrispondenza tra classificazione automatica e classificazione ufficiale.
