@@ -1,905 +1,200 @@
 \chapter{Applicazione realizzata}
 \label{cap:3}
-Nel presente capitolo, sarà descritta dettagliatamente l'intera architettura software del sistema sviluppato. L'analisi si concentrerà sulle scelte implementative che hanno permesso di trasformare un framework di Object Detection generico in uno strumento utilizzabile in presenza di dati astrofisici. In particolare, saranno illustrate le modifiche apportate al codice sorgente di YOLOv7 per renderlo compatibile con il formato dei magnetogrammi, assieme al modo in cui sono state integrate le librerie ausiliarie per realizzare effettivamente il processo di predizione.
+Nel presente capitolo, è descritta dettagliatamente l'intera architettura software del sistema sviluppato, focalizzandosi sulle strategie metodologiche adottate per trasformare un framework di Object Detection generico in uno strumento idoneo all'utilizzo di dati astrofisici.\\
+L'analisi si concentra sull'adattamento strutturale del modello YOLOv7. In particolare, è illustrato come esso sia stato esteso per processare i magnetogrammi solari, integrando moduli specifici per la gestione del formato scientifico e per il tracciamento temporale delle predizioni. \\
+Successivamente, viene discusso un approccio alternativo, basato sull'adattamento del dato piuttosto che del modello: un processo di pre-elaborazione che converte i dati scientifici in un formato standard, rendendoli compatibili con l'architettura originale, senza alterarne la struttura interna.
 
 \section{Adattamento del modello YOLOv7}
 \label{sec:adattamento_yolo}
-Per poter utilizzare un modello preesistente come YOLOv7 nel dominio dell'astrofisica solare, il primo passo necessario è stato quello di creare un metodo che permettesse al framework di leggere e di interpretare un formato di dati per cui non è stato progettato. Quindi, in questa sezione, saranno esplicitate tutte le modifiche tecniche apportate a livello pratico al codice sorgente, in modo da superare questa limitazione e rendere il modello nella sua interezza compatibile con i dati scientifici HARP.
+L'utilizzo di un modello di Object Detection generico come YOLOv7 nel dominio dell'astrofisica solare pone una sfida architetturale notevole: l'incompatibilità del framework con i formati di dati scientifici.\\
+In questa sezione, è illustrata la metodologia adottata per estendere le capacità di input del modello, abilitando il sistema all'interpretazione dei dati HARP. L'obiettivo è stato quello di superare i vincoli imposti dai formati di immagine tradizionali (attesi dal modello), garantendo che l'informazione fisica contenuta nei magnetogrammi venisse oreservata integralmente durante il processo di caricamento.
 \subsection{Implementazione di un Data Loader per Dati Scientifici}
 \label{sec:dataset_h5}
-Come ampiamente anticipato, YOLOv7 è progettato per operare su un dataset di immagini tradizionali (es. \texttt{JPEG, PNG}), le cui annotazioni sono fornite in semplici formati di testo, in cui ogni riga contiene classe e coordinate normalizzate della bounding box. I dati HARP, invece, presentano una complessità strutturale che ne impedisce l'utilizzo diretto, data da:
+Come ampiamente anticipato, l'architettura di YOLOv7 è vincolata all'uso di immagini standard (es. \texttt{JPEG, PNG}) e annotazioni testuali esplicite. I dati HARP, al contrario, presentano una complessità strutturale data da:
 \begin{itemize}
     \item \textbf{Formato contenitore:} i dati sono racchiusi da un formato \texttt{HDF5} (\texttt{.h5}), ovvero un file system gerarchico pensato per dati scientifici. All'interno del singolo file, i dati sono suddivisi in gruppi distinti e non solo come una semplice immagine.
     \item \textbf{Annotazioni implicite:} le coordinate delle bounding box non sono fornite esplicitamente, bensì è necessaria l'estrazione, partendo dagli attributi incastonati nella gerarchia del file.
 \end{itemize}
-Per superare l'incompatibilità tra le parti, è stata implementata una \textbf{classe custom} all'interno di \texttt{utils/dataset\_h5.py}, il quale -non solo- agisce come \textit{traduttore specializzato} tra il formato specifico e l'input standard, ma implementa due strategie software avanzate per garantire maggiore efficienza e robustezza: un meccanismo di \textit{caching su disco} per accelerare gli avvii e una \textit{gestione delle eccezioni} per ignorare i file corrotti in fase di addestramento. Tali compiti sono eseguiti dalla \textbf{classe DatasetH5}, all'interno della quale, la logica è implementata nei due metodi principali.
-    \subsubsection{Metodo Costruttore}
-    Il metodo \texttt{\_\_init\_\_} gestisce la pre-elaborazione di tutti i metadati del dataset. Per evitare la ridondanza di tale operazione, che può richiedere anche ore, ad ogni avvio del training, è stata implementata una logica di \textit{caching}. I passi sono i seguenti:
+Per colmare tale divario, è stato progettato ed implementato un \textbf{modulo di caricamento dati personalizzato}, che agisce come interfaccia tra il formato scientifico e il tensore di input richiesto dal modello. Il componente implementa due strategie metodologiche per garantire efficienza e stabilità: un meccanismo di \textit{Caching dei Metadati} per ottimizzare i tempi di avvio e un sistema di \textit{gestione delle eccezioni} per ignorare i file corrotti in fase di addestramento.
+    \subsubsection{Fase di Inizializzazione e Caching}
+    Questa fase gestisce la pre-elaborazione di tutti i metadati del dataset. Per evitare la ridondanza di operazioni costose ad ogni avvio del training, è stata implementata una logica di \textit{caching}. I passi sono i seguenti:
     \begin{enumerate}
-        \item \textbf{Verifica della Cache}: Come prima operazione, lo script controlla l'esistenza dei file \texttt{\_labels.npy} e \texttt{\_shapes.npy} nella cartella di appartenenza; essi sono progettati per contenere -rispettivamente- tutte le etichette elaborate e le dimensioni originali dell'immagine.
-        \item \textbf{Caricamento Veloce (\textit{Cache Hit})}: Se i suddetti file esistono (ovvero, se pre-elaborati precedentemente), le informazioni sono caricate immediatamente in memoria tramite la funzione \texttt{np.load()}, riducendo il tempo di avvio da ore a pochi secondi: questo rende il processo di sperimentazione molto più agile.
-        \item \textbf{Creazione della Cache (\textit{Cache Miss})}: Se i suddetti file non esistono (solitamente solo alla prima esecuzione), si itera su ogni singolo file \texttt{.h5}, eseguendo una serie di operazioni:
+        \item \textbf{Verifica della Cache}: Il sistema verifica preventivamente l'esistenza di strutture dati contenenti le etichette già elaborate e le dimensioni originali dell'immagine.
+        \item \textbf{Caricamento Veloce (\textit{Cache Hit})}: Se i file di cache sono presenti, le informazioni sono caricate immediatamente in memoria, riducendo i tempi di inizializzazione: questo rende il processo di sperimentazione molto più agile.
+        \item \textbf{Indicizzazione (\textit{Cache Miss})}: In assenza di cache, (prima esecuzione), il sistema scansiona ogni file scientifico, eseguendo le seguenti operazioni:
         \begin{enumerate}
-            \item \textbf{Accesso e Navigazione}: si accede alla struttura interna del file e viene letto il magnetogramma, situato in \texttt{/magnetogram/data}, memorizzando le dimensioni originali;
-            \item \textbf{Parsing e Validazione dei Metadati}: lo script naviga fino al percorso \texttt{/harp/metadata} e itera su ogni sottogruppo, ciascuno dei quali rappresenta una regione attiva. Per ognuna di esse, è eseguito un procedimento di validazione per mantenere l'integrità dell'etichetta:
+            \item \textbf{Estrazione}: accesso alla struttura interna del file per recuperare le dimensioni del magnetogramma;
+            \item \textbf{Validazione dei Metadati}: viene iterato ogni sottogruppo, ciascuno dei quali rappresenta una regione attiva, sottoponendolo a tre controlli di integrità dell'etichetta:
             \begin{enumerate}
-                \item \textbf{Verifica di Completezza}: si controlla la presenza di tutti gli attributi necessari per la definizione delle bounding box: \texttt{CRPIX1} e \texttt{CRPIX2} (coordinate x e y del pixel di riferimento della regione), \texttt{CRSIZE1} e \texttt{CRSIZE2} (larghezza e altezza in pixel della regione).
+                \item \textbf{Completezza}: verifica della presenza di tutti gli attributi necessari per la definizione delle bounding box: coordinate x e y del pixel di riferimento della regione, larghezza e altezza in pixel della regione.
                 Se anche solo uno di questi attributi manca, la regione è scartata.
-                \item \textbf{Verifica delle Dimensioni}: si controlla che i valori di \texttt{CRSIZE1} (larghezza) e \texttt{CRSIZE2} (altezza) siano strettamente maggiori di zero. Ovviamente, etichette con dimensioni nulle o negative sono considerate corrotte e, quindi, ignorate.
-                \item \textbf{Verifica dei Limiti (\textit{Boundary Check})}: dopo aver calcolato le coordinate normalizzate rispetto al centro della bounding box, si verifica che queste rientrino effettivamente nei limti dell'immagine (comprese tra 0.0 e 1.0). Le etichette il cui centro cade al di fuori dei bordi vengono scartate: questo garantisce che solo le regioni con un centro visibile siano considerate valide, pur ammettendo quelle che potrebbero estendersi parzialmente oltre il bordo.
+                \item \textbf{Consistenza Dimensionale}: scarto delle annotazioni con dimensioni nulle o negative.
+                \item \textbf{Limiti (\textit{Boundary Check})}: si esegue un controllo sulle coordinate normalizzate rispetto al centro della bounding box, escludendo dal dataset le annotazioni il cui baricentro ricade esternamente ai confini dell'immagine (valori non compresi tra 0.0 e 1.0). Questo filtraggio garantisce la validità spaziale delle regioni attive, preservando tuttavia quelle parzialmente visibili ai bordi purché il loro nucleo centrale sia all'interno del campo visivo. 
             \end{enumerate} 
-            \item \textbf{Calcolo e Memorizzazione}: Solo una volta superati i controlli di validazione, le coordinate -già calcolate e normalizzate in precedenza- vengono memorizzate in una lista temporanea.
+            \item \textbf{Memorizzazione}: le coordinate validate sono normalizzate e salvate in memoria.
         \end{enumerate}
-        \item \textbf{Salvataggio della Cache}: Al termine di questo lungo processo, le liste contenenti tutte le etichette e le dimensioni vengono salvate su disco nei rispettivi file \texttt{.npy}. In questo modo, la cache è creata e resterà disponibile per eventuali avvii futuri.
+        \item \textbf{Serializzazione}: Al termine del processo, i dati strutturati sono salvati su disco per essere riutilizzati nelle esecuzioni future.
     \end{enumerate}
-    \subsubsection{Metodo di Accesso ai Dati}
-    Il metodo \texttt{\_\_getitem\_\_} è chiamato ripetutamente durante il training da processi paralleli (\texttt{workers}) per caricare un singolo magnetogramma e prepararlo per il modello. La sua logica è resa robusta grazie al blocco \texttt{try...except} per garantire la stabilità dell'addestramento. \\
-    All'interno del suddetto metodo, sono eseguite una serie di operazioni:
+    \subsubsection{Procedura di Accesso e Trasformazione del Dato}
+    Durante la fase di addestramento, il modulo è interrogato ripetutamente dai processi paralleli per caricare i singoli magnetogrammi.\\
+    La procedura segue un flusso di trasformazione rigoroso:
     \begin{enumerate}
-        \item \textbf{Lettura del Dato}: Viene aperto il file \texttt{.h5} richiesto e ne legge i dati relativi al magnetogramma. Poiché questa è l'operazione più a rischio in caso di file corrotti, viene effettuato il \texttt{try...except}.
-        \item \textbf{Pre-processing}: Se la lettura ha successo, il magnetogramma è sottoposto ad una serie di trasformazioni, in modo da renderlo un input valido ed efficace per la rete neurale:
+        \item \textbf{Lettura del Dato}: Il dato grezzo viene estratto dal file scientifico, con il supporto di meccanismi di controllo per gestire eventuali errori di Input/Output.
+        \item \textbf{Pre-processing}: Se la lettura ha successo, il magnetogramma subisce una catena di trasformazioni per diventare un input valido per la rete neurale:
         \begin{enumerate}
-            \item \textbf{Pulizia dei Valori Anomali}: I dati scientifici possono contenere valori non validi come \texttt{Nan} (Not A Number) o \texttt{inf} (infinito), spesso causati da errori di misurazione o di calcolo. Non essendo valori numericamente stabili, se passati ad una rete neurale, causerebbero un fallimento nel processo di training. Per questo, è eseguita una pulizia preventiva tramite la funzione \texttt{np.nan\_to\_num}, che sostituisce le eventuali occorrenze di tali valori con il valore neutro \texttt{(0.0)}.
-            \item \textbf{Clipping dei Valori}: I magnetogrammi presentano una notevole variazione di intensità tra le diverse aree, ma i valori più significativi per l'identificazione delle regioni attive si trovano in un intervallo specifico, mentre, invece, valori oltremodo alti/bassi rappresentano -nella maggior parte dei casi- rumori. Per questo motivo è necessaria un'operazione di \textit{clipping} mediante la funzione \texttt{np.clip()} della libreria \texttt{NumPy}: essa "taglia" i valori del magnetogramma, forzando tutti i pixel al di fuori a rientrare nell'intervallo predefinito, aiutando, in questo modo, il modello a concentrarsi sulle caratteristiche più significative.
-            \item \textbf{Normalizzazione Min-Max}: Poiché le reti neurali apprendono più efficientemente quando i dati in input sono scalati in un intervallo piccolo, si applica una normalizzazione che riscala tutti i valori dei pixel all'interno dell'intervallo \texttt{[0,1]}, garantendo la stessa scala di valori che -in questo modo- accelera la convergenza del training.
-            \item \textbf{Ridimensionamento}: Poiché YOLOv7 richiede una dimensione di input standard (impostata a 640x640), i magnetogrammi sono ridimensionati mediante la funzione \texttt{cv2.resize()}, utilizzando un'interpolazione lineare che rappresenta un ottimo compromesso tra qualità visiva e velocità di calcolo.
-            \item \textbf{Conversione a 3 Canali}: Dato che YOLOv7 accetta unicamente immagini a tre canali (RGB), è stato necessario rendere i magnetogrammi (a singolo canale) compatibili, per cui il canale unico è stato duplicato tre volte mediante la funzione \texttt{np.stack()}. Ciò significa che non viene aggiunta informazione, ma c'è un semplice riadattamento del dato all'input richiesto dal modello. Infine, avviene la conversione in un tensore PyTorch.
+            \item \textbf{Trattamento delle Anomalie Numeriche}: I dati scientifici possono contenere valori non validi come \texttt{Nan} (Not A Number) o \texttt{inf} (infinito), spesso causati da errori di misurazione o di calcolo. Non essendo valori numericamente stabili, se passati ad una rete neurale, causerebbero un fallimento nel processo di training. Per questo, è eseguita una pulizia preventiva che sostituisce le eventuali occorrenze di tali valori con il valore neutro \texttt{(0.0)}.
+            \item \textbf{Clipping Dinamico}: I magnetogrammi presentano una notevole variazione di intensità tra le diverse aree, ma i valori più significativi per l'identificazione delle regioni attive si trovano in un intervallo specifico, mentre valori oltremodo alti o bassi rappresentano -nella maggior parte dei casi- rumori. Per questo motivo è necessaria un'operazione di \textit{clipping}: si "tagliano" i valori del magnetogramma, forzando tutti i pixel al di fuori a rientrare nell'intervallo predefinito, aiutando in questo modo il modello a concentrarsi sulle caratteristiche più significative.
+            \item \textbf{Normalizzazione Min-Max}: Poiché le reti neurali apprendono più efficientemente quando i dati in input sono scalati in un intervallo piccolo, si applica una normalizzazione che riscala tutti i valori dei pixel all'interno dell'intervallo \texttt{[0,1]}, garantendo la stessa scala di valori che accelera la convergenza del training.
+            \item \textbf{Ridimensionamento}: Poiché YOLOv7 richiede una dimensione di input standard (impostata a 640x640), i magnetogrammi sono ridimensionati, utilizzando un'interpolazione lineare che rappresenta un ottimo compromesso tra qualità visiva e velocità di calcolo.
+            \item \textbf{Conversione a 3 Canali}: Dato che YOLOv7 accetta unicamente immagini a tre canali (RGB), è stato necessario rendere i magnetogrammi (a singolo canale) compatibili, per cui il canale unico è stato duplicato tre volte. Ciò significa che non viene aggiunta informazione, ma c'è un semplice riadattamento del dato all'input richiesto dal modello. Infine, avviene la conversione in un tensore PyTorch.
         \end{enumerate}
-        \item \textbf{Gestione dell'Errore}: Se una qualsiasi operazione sul file fallisce, viene cattura l'eccezione. Piuttosto che interrompere l'intero training, lo script stampa a video un avviso con il nome del file problematico e restituisce un tensore  di zeri (corrispondente ad un'immagine nera).
+        \item \textbf{Gestione delle Anomalie}: Se una qualsiasi operazione sul file fallisce (file illeggibile o corrotto), viene cattura l'eccezione. Piuttosto che interrompere l'intero training, lo script stampa a video un avviso con il nome del file problematico e restituisce un tensore  di zeri (corrispondente ad un'immagine nera).
     \end{enumerate}
-La struttura così descritta rende l'intero processo efficiente in termini di tempo e robusto in caso di errori nel dataset. Il tutto è stato fondamentale per l'intero progetto: i dati scientifici sono stati utilizzati come se fossero immagini.\\
-Di seguito, è riportato il codice sorgente dello script.\\
-
-\begin{lstlisting}[language=Python,caption={[dataset\_h5.py]Implementazione commentata della classe \texttt{DatasetH5}. Ogni riga di codice è accompagnata da una spiegazione per illustrare in dettaglio il processo di caricamento, validazione e pre-elaborazione dei dati dei magnetogrammi.},label={lst:dataset_h5_commentato}]
-# --- BLOCCO IMPORTAZIONI ---
-import torch  # Libreria principale per il deep learning.
-from torch.utils.data import Dataset  # Classe base di PyTorch per creare dataset personalizzati.
-import h5py  # Libreria specifica per leggere file in formato HDF5.
-import numpy as np  # Libreria per il calcolo numerico, usata per manipolare gli array di dati.
-import cv2  # Libreria OpenCV per operazioni sulle immagini, come il ridimensionamento.
-import os  # Libreria per interagire con il sistema operativo.
-import glob  # Libreria per trovare file che corrispondono a un pattern.
-from tqdm import tqdm  # Libreria per gestire visivamente barre di avanzamento.
-
-# --- DEFINIZIONE DELLA CLASSE DATASET ---
-# Eredita da 'Dataset' di PyTorch per integrarsi con i suoi strumenti, come il DataLoader.
-class DatasetH5(Dataset):
-    # --- METODO COSTRUTTORE (`__init__`) ---
-    # Viene eseguito una sola volta all'inizio. Prepara il dataset.
-    def __init__(self, path, img_size=640, clip_range=(-1500, 1500)):
-        # Salva i parametri di configurazione come attributi della classe.
-        self.img_size = img_size  # Dimensione finale delle immagini.
-        self.clip_min, self.clip_max = clip_range  # Intervallo per il clipping dei valori dei pixel.
-        self.class_id = 0  # ID di classe fisso (0), dato che abbiamo solo una classe ("regione attiva").
-        
-        # --- LOGICA DI CACHING ---
-        # Definisce una sottocartella 'cache' dove verranno salvati i dati pre-elaborati.
-        cache_dir = 'cache'
-        # Crea la cartella 'cache' se non esiste gia'. 'exist_ok=True' evita errori se la cartella esiste.
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        # Costruisce un nome univoco per i file di cache basato sul nome della cartella dei dati (es. "Train" o "Validation").
-        cache_name = os.path.basename(os.path.normpath(path))
-        # Crea il percorso completo per il file di cache delle etichette (es. 'cache/Train_labels.npy').
-        label_cache = os.path.join(cache_dir, f'{cache_name}_labels.npy')
-        # Crea il percorso completo per il file di cache delle dimensioni originali delle immagini.
-        shape_cache = os.path.join(cache_dir, f'{cache_name}_shapes.npy')
-
-        # Cerca tutti i file .h5 nel percorso dato, li ordina e ne salva la lista.
-        self.h5_files = sorted(glob.glob(os.path.join(path, '*.h5')))
-        # Salva il numero totale di file trovati.
-        self.n = len(self.h5_files)
-
-        # Controlla se entrambi i file di cache esistono gia'.
-        if os.path.exists(label_cache) and os.path.exists(shape_cache):
-            # --- CARICAMENTO VELOCE DA CACHE (AVVII SUCCESSIVI) ---
-            print(f"Caricamento rapido da cache per '{cache_name}'...")
-            # Carica l'array delle etichette dal file .npy. 
-            # 'allow_pickle=True' e' necessario perche' le etichette sono in una lista di array.
-            self.labels = np.load(label_cache, allow_pickle=True)
-            # Carica l'array delle dimensioni dal file .npy.
-            self.shapes = np.load(shape_cache)
-            print(f"Cache caricata per {len(self.labels)} file. Avvio del training...")
-        else:
-            # --- CREAZIONE DELLA CACHE (PRIMO AVVIO LENTO) ---
-            print(f"Cache non trovata. Creazione della cache per '{cache_name}' (lento solo la prima volta)...")
-            
-            # Inizializza le liste che conterranno i dati estratti.
-            self.labels = []
-            self.shapes = []
-            bad_labels_count = 0  # Contatore per le etichette scartate.
-            
-            # Itera su ogni file .h5 trovato, mostrando una barra di avanzamento.
-            for h5_path in tqdm(self.h5_files, desc=f"Caching metadata from {path}"):
-                try:  # Blocco per gestire errori di lettura dei singoli file.
-                    # Apre il file .h5 in modalita' lettura. 'with' assicura la chiusura automatica.
-                    with h5py.File(h5_path, 'r') as f:
-                        # Estrae il dataset del magnetogramma.
-                        magnetogram_data = f['magnetogram/data']
-                        # Legge le dimensioni originali (altezza, larghezza).
-                        orig_h, orig_w = magnetogram_data.shape
-                        # Aggiunge le dimensioni alla lista 'self.shapes'.
-                        self.shapes.append([orig_h, orig_w])
-
-                        # Accede al gruppo dei metadati HARP.
-                        harp_group = f['harp/metadata']
-                        image_labels = []  # Lista temporanea per le etichette di questa immagine.
-                        
-                        # Itera su ogni regione attiva trovata nei metadati.
-                        for harp_id in harp_group:
-                            # Estrae gli attributi della regione attiva corrente.
-                            harp_attrs = harp_group[harp_id].attrs
-                            
-                            # Definisce le chiavi necessarie per calcolare una bounding box.
-                            required_keys = ['CRPIX1', 'CRPIX2', 'CRSIZE1', 'CRSIZE2']
-                            # Controlla se tutti gli attributi necessari sono presenti.
-                            if not all(key in harp_attrs for key in required_keys):
-                                continue  # Se ne manca uno, salta questa regione.
-
-                            # Converte le dimensioni in numeri decimali.
-                            w_abs = float(harp_attrs['CRSIZE1'])
-                            h_abs = float(harp_attrs['CRSIZE2'])
-
-                            # Controlla che le dimensioni siano positive.
-                            if w_abs <= 0 or h_abs <= 0:
-                                bad_labels_count += 1
-                                continue  # Se non lo sono, scarta l'etichetta.
-
-                            # Calcola le coordinate del centro e le dimensioni, normalizzandole rispetto alle dimensioni dell'immagine 
-                            x_center_norm = float(harp_attrs['CRPIX1'] + w_abs / 2) / orig_w
-                            y_center_norm = float(harp_attrs['CRPIX2'] + h_abs /2) / orig_h
-                            width_norm = w_abs / orig_w
-                            height_norm = h_abs / orig_h
-
-                            # Controlla che il centro della bounding box sia dentro l'immagine.
-                            if not (0.0 < x_center_norm < 1.0 and 0.0 < y_center_norm < 1.0):
-                                bad_labels_count += 1
-                                continue  # Se e' fuori, scarta l'etichetta.
-                            
-                            # Aggiunge l'etichetta valida (formato YOLO) alla lista temporanea.
-                            image_labels.append([self.class_id, x_center_norm, y_center_norm, width_norm, height_norm])
-                        
-                        # Aggiunge le etichette di questa immagine alla lista principale.
-                        self.labels.append(np.array(image_labels, dtype=np.float32) if image_labels else np.empty((0, 5), dtype=np.float32))
-
-                except Exception as e:  # Se si verifica un errore grave durante la lettura.
-                    print(f"Errore grave durante la lettura del file {h5_path}: {e}")
-                    # Aggiunge placeholder per mantenere l'allineamento degli indici.
-                    self.labels.append(np.empty((0, 5), dtype=np.float32))
-                    self.shapes.append([0, 0])
-
-            # Stampa un riepilogo delle etichette scartate, se ce ne sono.
-            if bad_labels_count > 0:
-                print(f"ATTENZIONE: Trovate e scartate {bad_labels_count} etichette corrotte.")
-
-            # Converte la lista di liste 'self.shapes' in un unico array NumPy.
-            self.shapes = np.array(self.shapes, dtype=np.float64)
-            
-            # SALVA I DATI PROCESSATI NELLA CACHE PER USO FUTURO.
-            print(f"Salvataggio della cache in '{path}'...") # NOTA: Stampa il percorso dei dati, non della cache
-            np.save(label_cache, self.labels)  # Salva le etichette.
-            np.save(shape_cache, self.shapes)  # Salva le dimensioni.
-            print("Cache creata. I prossimi avvii saranno istantanei.")
-
-    # --- METODO `__len__` ---
-    # Restituisce il numero totale di campioni nel dataset.
-    def __len__(self):
-        return self.n  # Restituisce il numero di file contati all'inizio.
-
-    # --- METODO `__getitem__` ---
-    # Carica e restituisce un singolo campione (immagine + etichetta) dato un indice.
-    def __getitem__(self, index):
-        # Ottiene percorso e etichette pre-caricate per l'indice richiesto.
-        h5_path = self.h5_files[index]
-        labels_tensor = torch.from_numpy(self.labels[index])
-        
-        try:  # Blocco per gestire errori di apertura file (es. file corrotti).
-            # Tenta di aprire il file H5 e leggere i dati dell'immagine.
-            with h5py.File(h5_path, 'r') as f:
-                data = f['magnetogram/data'][:]  # Carica l'intero array in memoria.
-
-            # Pulisce i dati da eventuali valori non numerici (NaN/inf).
-            if np.isnan(data).any() or np.isinf(data).any():
-                data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-            
-            # Pre-processa l'immagine: clipping, normalizzazione e ridimensionamento.
-            clipped_data = np.clip(data, self.clip_min, self.clip_max)
-            normalized_data = (clipped_data - self.clip_min) / (self.clip_max - self.clip_min)
-            resized_image = cv2.resize(normalized_data, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
-            
-            # Converte a 3 canali (duplicando il canale unico) per compatibilita' con YOLOv7.
-            image_rgb = np.stack([resized_image] * 3, axis=-1)
-            # Converte l'array NumPy in un tensore PyTorch e riordina le dimensioni in [C, H, W].
-            image_tensor = torch.from_numpy(image_rgb.transpose(2, 0, 1)).float()
-            
-            # Restituisce il campione completo.
-            return image_tensor, labels_tensor, h5_path, self.shapes[index]
-
-        except Exception as e:  # Se si verifica un qualsiasi errore durante il caricamento.
-            # Stampa un avviso e ignora il dato corrotto.
-            print(f"\nATTENZIONE: Ignorato file corrotto o illeggibile: {os.path.basename(h5_path)}")
-            
-            # Restituisce un'immagine nera per non interrompere il training.
-            placeholder_image = torch.zeros((3, self.img_size, self.img_size))
-            return placeholder_image, labels_tensor, h5_path, self.shapes[index]
-\end{lstlisting}
+L'adozione di questa architettura rende l'intero processo efficiente in termini di tempo e robusto in caso di errori nel dataset. Il tutto è stato fondamentale per l'intero progetto: i dati scientifici sono stati utilizzati  come se fossero immagini.\\
+Il dettaglio implementativo completo della classe è riportato nel Codice \ref{lst:dataset_h5_full} in Appendice \ref{app:codice}
 
 \subsection{Integrazione del Data Loader nella Logica di Training}
-La creazione di un data loader personalizzato è un passo necessario, ma non sufficiente per il completo riadattamento del modello: la logica appena descritta necessita di essere integrata nel flusso di lavoro. Per questo motivo, la decisione più adeguata è stata quella di intervenire direttamente sul codice sorgente di YOLOv7, in particolare su quegli script che sono responsabili dell'addestramento e della validazione del modello.
+La predisposizione del modulo di caricamento dati è un passo necessario, ma non sufficiente per l'adattamento completo del modello. Affinchè la nuova logica di gestione dei dati scientifici divenga operativa, è stato necessario integrarla organicamente nel flusso di lavoro.\\
+Di conseguenza, la strategia adottata ha previsto un'estensione strutturale dei motori di addestramento e validazione. L'obiettivo è stato quello di rendere l'architettura capace di accogliere e processare i tensori magnetografici, gestendo le specificità del formato scientifico senza compromettere la stabilità delle procedure di ottimizzazioni originali.
 
 \subsubsection{Adattamento della Logica di Training}
-La creazione del nuovo Data Loader ha richiesto alcune modifiche allo script \texttt{train.py}, che rappresenta il motore del processo di training. L'obiettivo principale era quello di permettere al modello di scegliere dinamicamente quale loader utilizzare - quello di default per immagini standard o quello personalizzato per i dati HDF5 - senza alterare la logica del ciclo di addestramento. Per ottenere ciò, sono state apportate le seguenti modifiche:
+L'estensione del modulo di caricamento dati ha richiesto un adeguamento strutturale del motore di addestramento. L'obiettivo primario è stato quello di rendere il modello capace di selezionare dinamicamente la strategia di ingestione dei dati più appropriata - standard o scientifica - senza alterare il flusso logico del ciclo di addestramento. Per ottenere ciò, sono state apportate le seguenti strategie architetturali:
 \begin{itemize}
-    \item \textbf{Importazione condizionale} \\
-    È stata importata la classe \texttt{DatasetH5} dallo script \texttt{utils/dataset\_h5.py}, in modo da renderla disponibile al momento della creazione del dataset.
-    \begin{lstlisting}[language=Python, caption={[Importazione condizionale in train.py] Importazione della classe \texttt{DatasetH5} personalizzata.}, label={lst:import_dataset_h5}]
-# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
-from utils.dataset_h5 import DatasetH5
-\end{lstlisting}
-    \item \textbf{Implementazione di una Funzione collate Personalizzata} \\
-    L'implementazione della funzione \texttt{h5\_collate\_fn} è stata necessaria affinchè l'assemblaggio dei dati in batch avvenisse correttamente. Quando il Data Loader raggruppa più campioni per formare un batch, il modello deve essere in grado di effettuare un'associazione univoca tra ogni set di etichette (ovvero le coordinate delle bounding box) ed i relativi magnetogrammi di origine. Il compito principale della funzione è proprio quello di aggiungere a ciascuna etichetta un indice numerico che corrisponde alla posizione dell'immagine all'interno del batch; così facendo, il formato delle etichette è trasformato per includere tale indicatore, risolvendo ogni ambiguità. Questo ordinamento è necessario per permettere al ciclo di addestramento di confrontare le predizioni del modello con le etichette reali per ogni singolo magnetogramma, garantendo il corretto funzionamento dell'intero processo di apprendimento.
-    \begin{lstlisting}[language=Python, caption={[Funzione h5\_collate\_h5 in train.py] Implementazione di una Funzione collate Personalizzata h5\_collate\_h5 in train.py}, label={lst:import_dataset_h5}]
-# Funzione custom per raggruppare campioni in un batch. Aggiunge l'indice del batch a ogni etichetta per l'associazione.
-def h5_collate_fn(batch):
-    # Separa gli elementi del batch (immagini, etichette, percorsi, dimensioni)
-    imgs, labels, paths, shapes = zip(*batch)
-
-    batched_labels = [] # Lista per accumulare le etichette indicizzate
-
-    # Itera su ogni campione (immagine + etichette) nel batch
-    # 'i' sara' l'indice dell'immagine nel batch (0, 1, 2, ...)
-    for i, label in enumerate(labels):
-
-        # Processa solo se l'immagine ha almeno un'etichetta
-        if label.shape[0] > 0:
-
-            # Crea un tensore riempito con l'indice (i) dell'immagine
-            # Avra' la stessa n. di righe delle etichette di questa immagine
-            batch_idx = torch.full((label.shape[0], 1), i,
-                                   device=imgs[0].device)
-
-            # Concatena l'indice (colonna 0) alle etichette [classe, x, y, w, h]
-            label_with_batch_idx = torch.cat((batch_idx,
-                                           label.to(imgs[0].device)), 1)
-
-            # Aggiunge il nuovo tensore [i, classe, x, y, w, h] alla lista
-            batched_labels.append(label_with_batch_idx)
-
-    # Se sono state trovate etichette in questo batch...
-    if len(batched_labels) > 0:
-        # ...le unisce tutte in un unico tensore [N_tot_labels, 6]
-        targets = torch.cat(batched_labels, 0)
-    else:
-        # ...altrimenti crea un tensore vuoto (con 6 colonne) per coerenza
-        targets = torch.empty(0, 6, device=imgs[0].device)
-
-    # Restituisce le immagini (stackate in un unico tensore batch)
-    # e il tensore unico delle etichette (targets)
-    return torch.stack(imgs, 0), targets, paths, shapes
-
-\end{lstlisting}
-    \item \textbf{Attivazione tramite file di configurazione} \\
-    Per integrare il nuovo Data Loader, piuttosto che utilizzare un argomento da riga di comando, è stato implementato un meccanismo di \textit{attivazione contestuale} basato sul file di configurazione del dataset. All'avvio, lo script ispeziona il file \texttt{.yaml} fornito tramite argomento \texttt{-{}-data} alla ricerca della chiave booleana \texttt{is\_h5}: se è impostata su \texttt{True}, il framework capisce che deve gestire un dataset in formato \texttt{.h5} e attiva automaticamente il dataset personalizzato
-    \begin{lstlisting}[language=Python, caption={[Attivazione DataLoader in train.py] Attivazione tramite file di configurazione nello script train.py}, label={lst:activate_dataset_h5}]
-# Apre e legge il file di configurazione del dataset (es. harp.yaml)
-with open(opt.data) as f:
-    data_dict = yaml.load(f, Loader=yaml.SafeLoader)
-
-# Controlla se la chiave 'is_h5' esiste e ha valore True; altrimenti, imposta False
-is_h5_dataset = data_dict.get('is_h5', False)
-\end{lstlisting}
-    \item \textbf{Iniezione della logica di caricamento dati} \\
-    Il cambiamento più significativo è avvenuto nella sezione in cui è creato il \texttt{dataloader}. Grazie alla variabile booleana \texttt{is\_h5\_dataset},inizializzata come descritto al punto precedente, è stata inserita una struttura condizionale del tipo \texttt{if-else}:
+    \item \textbf{Integrazione Modulare delle Risorse} \\
+    Il modulo di caricamento personalizzato è stato integrato nell'ambiente di addestramento in modo condizionale, rendendo le classi disponibili al sistema solo al momento dell'inizializzazione del dataset, garantendo una gestione pulita delle dipendenze.\\
+    Vedi Codice \ref{lst:train_import} in Appendice \ref{app:codice}.
+    \item \textbf{Strategia di Assemblaggio dei Batch (\textit{Batch Collation})}\\
+    Di fondamentale importanza è stata l'implementazione di una logica di aggregazione personalizzata per gestire la corretta formazione dei lotti di dati (\textit{batch}). Quando il sistema raggruppa più campioni, è fondamentale mantenere un'associazione univoca tra tensori magnetici e relative etichette spaziali. La procedura sviluppata assegna un indice posizionale a ciascuna annotazione all'interno del batch, risolvendo le ambiguità strutturali tipiche dei dati complessi. Questo ordinamento permette al modello di correlare le predizioni con le \textit{ground truth} per ogni singolo magnetogramma, passaggio essenziale per il calcolo della funzione di perdita (\textit{loss function}).\\
+    La logica di assemblaggio del batch è illustrata nel Codice \ref{lst:train_collate} in Appendice \ref{app:codice}.
+    \item \textbf{Attivazione Contestuale tramite Configurazione} \\
+    Per garantire una completa flessibilità del sistema, piuttosto che utilizzare un argomento da riga di comando, è stato implementato un meccanismo di \textit{attivazione contestuale} basato sul file di configurazione del dataset. All'avvio, il sistema analizza i metadati di configurazione: la presenza di un identificatore specifico (\textit{flag}) istruisce il framework sulla natura scientifica del dato, innescando automaticamente il meccanismo dedicato senza richiedere interventi manuali.\\
+    Quanto descritto è mostrato nel Codice \ref{lst:train_config} in Appendice \ref{app:codice}.
+    \item \textbf{Selezione Dinamica del Flusso di Caricamento Dati} \\
+    Il cambiamento più significativo riguarda la logica di inizializzazione del flusso dati. Grazie al meccanismo di riconoscimento descritto al punto precedente, è stata inserita una struttura di controllo che opera a runtime:
     \begin{itemize}
-        \item se \texttt{is\_h5\_dataset} è \texttt{True}, lo script ignora la funzione \texttt{create\_dataloader} di default ed istanzia la classe \texttt{DatasetH5} con il DataLoader standard di PyTorch, specificando la funzione \texttt{h5\_collate\_fn} personalizzata (descritta poco prima);
-        \item se è \texttt{False}, lo script maniene il suo comportamento originale.
+        \item in presenza di dati scientifici, il sistema ignora la funzione di caricamento standard ed istanzia un modulo personalizzato, con la strategia di assemblaggio specifica;
+        \item in caso contrario, il sistema mantiene inalterato il suo comportamento originale.
     \end{itemize}
-    \begin{lstlisting}[language=Python, caption={[Iniezione della logica di caricamento dati in train.py] Logica condizionale per la selezione dinamica del data loader in \texttt{train.py}.}, label={lst:dataloader_choice}]
-# Logica condizionale per la selezione dinamica del data loader
-
-# Controlla il flag booleano letto dal file .yaml
-if is_h5_dataset:
-    logger.info("Utilizzo del DataLoader custom per dataset .h5")
-
-    # Crea un'istanza del dataset personalizzato
-    dataset = DatasetH5(path=train_path, img_size=imgsz)
-
-    # Imposta il sampler (necessario per il training distribuito)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if rank != -1 else None
-
-    # Crea il DataLoader di PyTorch usando la collate_fn personalizzata
-    dataloader = torch.utils.data.DataLoader(dataset,
-                                            batch_size=batch_size,
-                                            shuffle=sampler is None and not opt.rect,
-                                            num_workers=opt.workers,
-                                            sampler=sampler,
-                                            pin_memory=True,
-                                            collate_fn=h5_collate_fn)
-else:
-    # Logica originale di YOLOv7 per dataset standard
-    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
-                                            hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
-                                            world_size=opt.world_size, workers=opt.workers,
-                                            image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '))
-\end{lstlisting}
-    \item \textbf{Disattivazione della Normalizzazione Standard}\\
-    L'ultima modifica cruciale è stata apportata all'interno del ciclo di addestramento. La logica originale di YOLOv7 presuppone che il data loader restituisca immagini in formato 8-bit (valori da 0 a 255) e, pertanto, applica una normalizzazione dividendo il tensore delle immagini per 255.0. Poiché il \texttt{DatasetH5} personalizzato esegue già una normalizzazione, tale ulteriore divisione avrebbe reso i dati inadeguati per l'uso. Grazie all'utilizzo del medesimo flag \texttt{is\_h5\_dataset}, è stata introdotta una logica condizionale che salta tale operazione di divisione per i magnetogrammi, mantenendola attiva per i dataset standard.
-    \begin{lstlisting}[language=Python, caption={[Logica condizionale per la normalizzazione dell'input in train.py]
-Logica condizionale per la gestione della normalizzazione dei dati di input. La divisione standard per 255.0 viene applicata solo ai dataset di immagini tradizionali (ramo \texttt{else}) e bypassata per i dati H5 (ramo \texttt{if}) per preservare la normalizzazione [0,1] gia' applicata dal \texttt{DatasetH5}.}, label={lst:dataloader_normalization}]
-if is_h5_dataset:
-    # Per i dati H5, i valori sono gia' normalizzati [0,1].
-    imgs = imgs.to(device, non_blocking=True).float()
-else:
-    # Per le immagini normali, mantengo la logica originale.
-    imgs = imgs.to(device, non_blocking=True).float()/255.0
-\end{lstlisting}
+    La selezione condizionale del Data Loader è riportata nel Codice \ref{lst:train_loader_choice} in Appendice \ref{app:codice}.
+    \item \textbf{Normalizzazione Condizionale}\\
+    Una modifica critica ha riguardato il pre-processing interno al ciclo di addestramento. La logica originale di YOLOv7 presuppone che il data loader restituisca immagini in formato 8-bit (valori da 0 a 255) e, pertanto, applica una normalizzazione dividendo il tensore delle immagini per 255.0. Poiché la logica personalizzata esegue già una normalizzazione, tale ulteriore divisione avrebbe reso i dati inadeguati per l'uso. Grazie all'utilizzo del medesimo flag, è stata introdotta una logica condizionale che salta tale operazione di divisione per i magnetogrammi, mantenendola attiva per i dataset standard.
 \end{itemize}
-L'approccio appena descritto ed adottato per lo scopo è noto come \textit{feature flagging}: si tratta di una tecnica di sviluppo software che permette - all'occorrenza - di attivare/disattivare funzionalità specifiche di un'applicazione senza dover modificare il codice sorgente per intero, ma solo in modo mirato. In questo modo, è stato possibile estendere la funzionalità di YOLOv7 in modo modulare, rimanendo coerente al funzionamento originale e garantendo che la nuova logica sia eseguita solo quando esplicitamente richiesto.
+La disattivazione della normalizzazione standard è visibile nel Codice \ref{lst:train_norm} in Appendice \ref{app:codice}.\\
+L'approccio metodologico adottato segue il paradigma del \textit{feature flagging}: una tecnica di ingegneria del software che permette di attivare funzionalità specifiche di un'applicazione senza dover apportare modifiche significative. Questo ha garantito l'estensione delle capacità di YOLOv7 in modo modulare, mantenendo la totale retrocompatibilità con l'architettura originale e assicurando che la nuova logica sia eseguita solo quando esplicitamente richiesto dal contesto dei dati.
 
 \subsubsection{Estensione della Logica di Validation}
-Per mantenere una coerenza all'interno del modello e per garantire che non ci siano conflitti in fase di validazione, è stato necessario apportare modifiche anche allo script \texttt{test.py}. Un modello addestrato deve necessariamente essere validato utilizzando lo stesso processo di caricamento e pre-elaborazione. Per questo motivo, sono state effettuate alcune modifiche simili rispetto a quelle apportate in \texttt{train.py}:
+Per mantenere una coerenza all'interno dell'intero ciclo di apprendimento,è stato necessario estendere le funzionalità del motore di validazione. Un modello addestrato su dati scientifici deve essere necessariamente validato utilizzando le medesime procedure di pre-elaborazione e caricamento adottate durante il training. Per questo motivo, sono state implementate modifiche strutturali speculari rispetto a quelle introdotte in fase di addestramento:
 \begin{itemize}
-       \item \textbf{Importazione condizionale} \\
-       È stata aggiunta l'istruzione per importare la classe \texttt{DatasetH5} dallo script \texttt{utils/dataset\_h5.py}, in modo da renderla disponibile nello script di validazione, assieme alla funzione \texttt{default\_collate} di default di PyTorch per assemblare i batch ed importata per essere utilizzata nella funzione \texttt{h5\_collate\_fn}.
-    \begin{lstlisting}[language=Python, caption={[Importazione condizionale in test.py] Importazione della classe \texttt{DatasetH5} personalizzata.}, label={lst:import_dataset_h5_2}]
-# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
-from utils.dataset_h5 import DatasetH5
-
-# Importa la funzione di default di PyTorch per l'assemblaggio dei batch.
-from torch.utils.data.dataloader import default_collate
-\end{lstlisting}
-    \item \textbf{Implementazione di una Funzione collate Personalizzata} \\
-    Analogamente allo script di training, è stata aggiunta una funzione \texttt{h5\_collate\_fn} semplificata, con lo scopo di raggruppare i singoli campioni caricati dalla classe \texttt{DatasetH5} in un unico batch. D'altronde, durante la fase di training, tale funzione doveva necessariamente aggiungere l'indice del batch ad ogni etichetta per il calcolo della loss; durante la fase di validazione, tale passaggio non è più necessario. Pertanto, per mantenere l'efficienza, la funzione si occupa semplicemente di impilare i tensori in modo standard.
-    \begin{lstlisting}[language=Python, caption={[Funzione h5\_collate\_h5 in test.py] Implementazione di una Funzione collate Personalizzata h5\_collate\_h5 in test.py}, label={lst:h5_arg}]
-# Funzione custom per raggruppare i dati provenienti da DatasetH5 in un batch.
-def h5_collate_fn(batch):
-# Delega l'assemblaggio del batch alla funzione di default di PyTorch,  che impila automaticamente i campioni in un unico tensore.
-
-    return default_collate(batch)
-\end{lstlisting}
-    \item \textbf{Aggiunta di un Parametro}\\
-    La funzione principale \texttt{test} è stata estesa per accettare un nuovo argomento booleano \texttt{is\_magnetogram}. Lo scopo è di fungere da "flag" interno. Esso è passato dallo script \texttt{train.py} durante la validazione, a fine epoca, per informare la funzione \texttt{test} che sta per ricevere dati di tipo magnetogramma piuttosto che immagini standard. Il meccanismo è il seguente: non si attiva il caricamento dei dati H5, bensì controlla i comportamenti successivi (ad esempio la normalizzazione delle immagini e la visualizzazione dei risultati), assicurando che vengano trattati come dati scientifici.
-    \begin{lstlisting}[language=Python, caption={[Aggiunta del Parametro in test.py] Aggiunta del parametro is\_magnetogram in test.py}, label={lst:h5_arg}]
-        def test(data,
-         ...,
-         is_magnetogram=False):
-    \end{lstlisting}
+    \item \textbf{Integrazione delle Risorse di Validazione} \\
+    Analogamente alla fase di training, le classi necessarie per la gestione di dati scientifici sono state rese disponibili all'ambiente di validazione tramite importazioni condizionali, assicurando che il modulo di caricamento specifico sia accessibile solo quando richiesto dalla configurazione.\\
+    Vedi Codice \ref{lst:test_import} in Appendice \ref{app:codice}.
+    \item \textbf{Assemblaggio Semplificato dei Batch} \\
+    È stata definita una logica di aggregazione dei dati ottimizzata per la fase di inferenza. A differenza del training, dove l'associazione indice-etichetta è cruciale per il calcolo della \textit{loss}, la validazione richiede un processo più snello. Pertanto, è stata implementata una procedura semplificata, con lo scopo di raggruppare i tensori caricati in un unico batch standard, massimizzando l'efficienza computazionale durante la valutazione.\\
+    L'implementazione semplificata è nel Codice \ref{lst:test_collate} in Appendice \ref{app:codice}.
+    \item \textbf{Flag di Controllo Interno}\\
+    La funzione principale di test è stata estesa per accettare un nuovo parametro di controllo (\textit{flag}) booleano. Quest'ultimo è trasmesso dal motore di addestramento al termine di ogni epoca per segnalare la natura dei dati in arrivo. Tale indicatore non attiva il caricamento dei dati scientifici, bensì governa i comportamenti successivi del sistema (ad esempio la normalizzazione delle immagini e la visualizzazione dei risultati), assicurando che i dati scientifici vengano trattati con le procedure appropriate.\\
+    La modifica alla firma della funzione è mostrata nel Codice \ref{lst:test_param} in Appendice \ref{app:codice}.
     \item \textbf{Creazione Dinamica del Data Loader} \\
-    Con il seguente blocco, si vuole rendere lo script flessibile, in grado sia di validare il dataset standard che quello H5 senza modifiche manuali. Legge il file di configurazione \texttt{.yaml} del dataset e cerca la chiave \texttt{is\_h5}: se è \texttt{True}, istanzia la classe \texttt{DatasetH5} e crea un Data Loader di PyTorch che la utilizza assieme alla \texttt{h5\_collate\_fn} semplificata; se \texttt{False} o non presente, lo script esegue la funzione originale \texttt{create\_dataloader}, mantenendo a pieno la compatibilità con dataset di immagini tradizionali.
-    \begin{lstlisting}[language=Python, caption={[Creazione Dinamica del Data Loader in test.py] Introduzione di una logica condizionale per scegliere dinamicamente quale data loader utilizzare in test.py}, label={lst:h5_arg}]
-# Legge il flag 'is_h5' dal dizionario 'data' (caricato dal file .yaml).
-# Se la chiave non esiste, imposta 'False' come valore di default.
-is_h5_dataset = data.get('is_h5', False)
-
-# Controlla se il dataset e' di tipo H5.
-if is_h5_dataset:
-    # Stampa un messaggio informativo nel log.
-    print("Utilizzo del DataLoader custom per dataset .h5")
-    
-    # Istanzia la classe DatasetH5 personalizzata.
-    # 'data[task]' contiene il percorso alla cartella dei dati (es. 'val').
-    dataset = DatasetH5(path=data[task], img_size=imgsz)
-    
-    # Crea un DataLoader standard di PyTorch utilizzando il dataset H5.
-    dataloader = torch.utils.data.DataLoader(dataset,
-                                             # Imposta la dimensione del batch.
-                                             batch_size=batch_size,
-                                             # Disattiva lo 'shuffle' (mescolamento) per la validazione/test.
-                                             shuffle=False,
-                                             # Imposta il numero di processi paralleli per caricare i dati.
-                                             num_workers=8, 
-                                             # Abilita il 'pinning' della memoria per trasferimenti piu' veloci alla GPU.
-                                             pin_memory=True,
-                                             # Specifica la funzione custom per assemblare i campioni in un batch.
-                                             collate_fn=h5_collate_fn)
-# Se il dataset non e' di tipo H5...
-else:
-    # ...esegue la logica originale di YOLOv7.
-    # Chiama la funzione 'create_dataloader' standard del framework.
-    dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
-                                   prefix=colorstr(f'{task}: '))[0]
-\end{lstlisting}
-\item \textbf{Normalizzazione Condizionale delle Immagini} \\
-Per evitare di processare i dati erroneamente, la normalizzazione dei valori dei pixel è applicata in modo selettivo, così da non ricadere in una "doppia normalizzazione". Sappiamo che le immagini standard hanno valori di pixel nell'intervallo [0,255], mentre i magnetogrammi sono normalizzati già nella classe \texttt{DatasetH5} (tramite clipping e scalatura min-max): è per questo che la flag \texttt{is\_magnetogram} agisce, proprio per assicurare che divisione per 255.0 sia saltata quando si tratta di dati scientifici, preservando la corretta scala dei valori.
-\begin{lstlisting}[language=Python, caption={[Normalizzazione Condizionale delle Immagini in test.py] Aggiunta del controllo su is\_magnetogram in test.py}, label={lst:h5_arg}]
-    # Salta la divisione se e' un magnetogramma
-    if not is_magnetogram:
-            img /= 255.0 
-\end{lstlisting}
-\item \textbf{Adattamento per il Ricalcolo delle Coordinate}\\
-Un'ulteriore modifica necessaria per garantire che le coordinate delle bounding box (sia predette dal modello che quelle reali usate per la validazione) venissero correttamente riscalate in base dalle dimensioni dell'input alle dimensioni originali del magnetogramma.
-Il \texttt{DatasetH5} personalizzato restituisce le dimensioni originali in un formato diretto (lista \texttt{[H,W]}). Il data loader originale, invece, le forniva una struttura dati più complessa, che richiedeva un accesso indicizzato (\texttt{shapes[si][0]}). Per allineare il codice al nuovo formato dei dati, le chiamate della funzione \texttt{scale\_coords} sono state semplificate, rimuovendo gli indici non più necessari. Questo assicura che il confronto tra predizioni ed etichette avvenga correttamente nello spazio pixel originale dell'immagine.
-\begin{lstlisting}[language=Python, caption={[Adattamento scale\_coords in test.py] Modifica delle chiamate alla funzione scale\_coords. Gli indici (es. shapes[si][0]), richiesti dal dataloader originale, sono stati rimossi per adattarsi al formato [H, W] delle dimensioni restituito dal DatasetH5. Questo garantisce la corretta riscalatura sia delle predizioni (predn) che delle etichette (tbox).}, label={lst:h5_arg}]
-# ... all'interno del ciclo sulle predizioni ...
-
-# 1. Riscalare le coordinate delle PREDIZIONI
-# La chiamata originale (shapes[si][0]) e' stata modificata in 'shapes[si]'
-scale_coords(img[si].shape[1:], predn[:, :4], shapes[si])  # native-space pred
-
-# ... all'interno del blocco 'if nl:' (se ci sono etichette reali) ...
-
-# 2. Riscalare le coordinate delle ETICHETTE REALI (target)
-# Anche qui, la chiamata e' stata adattata a 'shapes[si]'
-tbox = xywh2xyxy(labels[:, 1:5])
-scale_coords(img[si].shape[1:], tbox, shapes[si])  # native-space labels
-\end{lstlisting}
-\item \textbf{Adattamento delle Funzioni di Visualizzazione} \\
-Infine, per garantire che i risultati della validazione siano visivamente corretti ed interpretabili, sono state modificate le chiamate alle funzioni di plotting.
-\begin{lstlisting}[language=Python, caption={[Adattamento delle Funzioni di Visualizzazione in test.py] Modifica della chiamata alla funzione di plotting in test.py}, label={lst:h5_arg}]
-    # Avvia un thread separato per la funzione 'plot_images' (per non bloccare il loop principale).
-# 'args' passa gli argomenti posizionali (immagine, etichette, percorso, nome file, nomi classi).
-# 'kwargs' (key-word arguments) passa un dizionario:
-#   'is_magnetogram' viene impostato con il valore del flag 'is_magnetogram'.
-# Questo permette a 'plot_images' di sapere che tipo di immagine sta visualizzando.
-Thread(target=plot_images, args=(img, targets, paths, f, names), 
-       kwargs={'is_magnetogram': is_magnetogram}, 
-       daemon=True).start()
-\end{lstlisting}
+    Per conferire flessibilità allo script di validazione, è stato implementato un blocco di istanziazione dinamica. Il sistema legge il file di configurazione del dataset e, in base alla presenza della chiave specifica per i dati scientifici:
+    \begin{itemize}
+        \item in caso positivo, istanzia il modulo personalizzato con la strategia di assemblaggio semplificata;
+        \item in caso negativo (o in assenza della chiave), esegue la funzione di caricamento originale, mantenendo la totale compatibilità con i dataset di immagini tradizionali.
+    \end{itemize}
+    La logica di creazione del loader è nel Codice \ref{lst:test_loader_choice} in Appendice \ref{app:codice}.
+\item \textbf{Normalizzazione Condizionale} \\
+Per evitare alterazioni numeriche dei dati, la normalizzazione dei dei pixel è applicata in modo selettivo. Mentre le immagini standard (0-255) richiedono una divisione per essere portate nel range unitario, i magnetogrammi arrivano al modulo di validazione già normalizzati. Grazie al \texttt{flag di controllo}, il sistema inibisce la divisione standard in presenza di dati scientifici, evitando una doppia normalizzazione che comprometterebbe la corretta scala dei valori.\\
+Il bypass della divisione per 255 è nel Codice \ref{lst:test_norm} in Appendice \ref{app:codice}.
+\item \textbf{Riscalamento delle Coordinate}\\
+Un intervento critico ha riguardato la logica di proiezione delle bounding box (sia quelle predette dal modello che quelle reali). Il modulo personalizzato restituisce le dimensioni originali in un formato diretto (lista \texttt{[H,W]}), differente dalla struttura nidificata utilizzata dal data loader standard. Per allineare il codice a questo formato, le chiamate alla funzione di riscalamento sono state semplificate, rimuovendo gli indici non più necessari. Questo garantisce che il confronto tra le predizioni del modello ed etichette di verità avvenga correttamente nello spazio pixel originale dell'immagine, assicurando la validità delle metriche di valutazione.\\
+L'adattamento delle coordinate è visibile nel Codice \ref{lst:test_coords} in Appendice \ref{app:codice}.
+\item \textbf{Visualizzazione Scientifica} \\
+Infine, per garantire che i risultati della validazione siano visivamente corretti ed interpretabili, le chiamate alle funzioni di plotting sono state modificate per supportare il rendering scientifico dei magnetogrammi (mappatura dei colori e correzione geometrica).\\
+La chiamata modificata alla funzione di plotting è nel Codice \ref{lst:test_plot_call} in Appendice \ref{app:codice}.
 \end{itemize}
 
 \subsubsection{Personalizzazione delle Utility di Visualizzazione}
-L'ultimo passo dell'adattamendo del framework è stata inerente alla visualizzazione corretta dei risultati, quindi nell'utility di visualizzazione, in particolare nella funzione \texttt{plot\_images} contenuta nel modulo \texttt{utils/plots.py}. Nella sua versione originale, questa funzione è progettata per operare esclusivamente su immagini a 3 canali (BGR), presupponendo che l'input sia sempre un'immagine standard.\\
-Applicare questa logica direttamente ai magnetogrammi - che sono dati scientifici a singolo canale rappresentanti l'intensità del campo magnetico - avrebbe prodotto un output visivamente incomprensibile (ad esempio, una visualizzazione con falsi colori), rendendo impossibile la rappresentazione delle polarità, che sono l'informazione cruciale. \\
-L'obiettivo è stato, quindi, quello di integrare la funzione con una logica di visualizzazione personalizzata, solo in caso di dati \texttt{.h5}, includendo: applicazione di una specifica mappa di colori, correzione dell'orientamento dell'immagine e adattamento delle coordinate delle bounding box. Allo stesso tempo, è stata mantenuta la piena compatibilità con i dataset di immagini standard.\\
-Per raggiungere questo scopo, la funzione è stata modificata attraverso i seguenti interventi:
+L'ultimo tassello nell'adattamento del framework ha riguardato la corretta rappresentazione grafica dei risultati all'interno del modulo di visualizzazione. Nella sua versione originale, il sistema è progettato per operare esclusivamente su immagini a tre canali (BGR), presupponendo che l'input sia sempre un'immagine standard.\\
+Applicare questa logica direttamente ai magnetogrammi - che sono dati scientifici a singolo canale rappresentanti l'intensità del campo magnetico - avrebbe prodotto un output visivamente incomprensibile (falsi colori e perdita di contrasto), rendendo impossibile la distinzione delle polarità, informazione cruciale per l'analisi fisica. \\
+L'obiettivo è stato, quindi, quello di integrare una logica di visualizzazione personalizzata che si attiva esclusivamente in presenza di dati scientifici. Tale logica include l'applicazione di mappe cromatiche specifiche, la correzione dell'orientamento geometrico e il conseguente adattamento delle coordinate delle bounding box. Allo stesso tempo, è stata mantenuta la piena compatibilità con i dataset standard.\\
+Per raggiungere questo scopo, la procedura di visualizzazione è stata modificata attraverso i seguenti interventi:
 \begin{itemize}
     \item \textbf{Estensione della Firma della Funzione}\\
-    La prima modifica è stata l'estensione della firma della funzione \texttt{plot\_images}. Per effettuare tale modifica, è stato aggiunto un nuovo argomento opzionale \texttt{is\_magnetogram=False}, il quale agisce come una \textit{feature flag}: permette agli script \texttt{train.py} e \texttt{test.py} di comunicare alla funzione di visualizzazione che sta ricevendo un batch di dati scientifici (magnetogrammi) e non immagini standard. Il valore \texttt{False} di default garantisce che la funzione mantenga il suo comportamento originale se il flag non è specificato.
-    \begin{lstlisting}[language=Python, caption={[Estensione della firma di plot\_images in plots.py] Aggiunta del parametro opzionale is\_magnetogram=False alla firma della funzione plot\_images. Questo flag permette di attivare la logica di visualizzazione personalizzata per i dati scientifici.}, label={lst:h5_arg}]
-    # La firma della funzione originale terminava con 'max_subplots=16'.
-# E' stato aggiunto il nuovo argomento 'is_magnetogram=False' alla fine.
-def plot_images(images, targets, paths=None, fname='images.jpg', names=None, 
-                max_size=640, max_subplots=16, is_magnetogram=False):
-    # Il resto del corpo della funzione...
-\end{lstlisting}
+    La prima modifica ha riguardato l'interfaccia della procedura di plotting. È stato introdotto un parametro opzionale di controllo, il quale agisce come una \textit{feature flag} o \texttt{indicatore di contesto}: esso permette ai motori di addestramento e validazione di segnalare al visualizzatore che il batch in arrivo contiene dati scientifici (magnetogrammi) e non immagini standard. Il valore di default impostato a falso garantisce che la funzione mantenga inalterato il suo comportamento in assenza di specifiche istruzioni.\\
+    Vedi Codice \ref{lst:plot_sig} in Appendice \ref{app:codice}.
     \item \textbf{Normalizzazione Condizionale dell'Input}\\
-    Subito dopo l'inizializzazione, la funzione \texttt{plot\_images} de-normalizzava i tensori di input (che si assumeva che fossero in \texttt{[0,1]}), moltiplicandoli per 255. Questa operazione è corretta per le immagini standard, ma errata per i magnetogrammi. Questi ultimi, pur essendo normalizzati nell'intervallo \texttt{[0,1]} dal \texttt{DatasetH5}, richiedono un processo di rendering scientifico e non una semplice conversione a 8 bit. La modifica incapsula questa operazione all'interno di un \texttt{if}: la de-normalizzazione \texttt{*=255} viene eseguita solo \texttt{if not is\_magnetogram}.
-    \begin{lstlisting}[language=Python, caption={[Normalizzazione condizionale input in plots.py] La de-normalizzazione standard (moltiplicazione per 255) viene resa condizionale. Viene eseguita solo se il flag is\_magnetogram è False, evitando di alterare i dati scientifici.}, label={lst:h5_arg}]
-    # ... (codice precedente) ...
-    if isinstance(targets, torch.Tensor):
-        targets = targets.cpu().numpy()
-
-    # La riga originale 'images *= 255' e' stata resa condizionale.
-    # Si esegue solo se NON e' un magnetogramma E se i valori sono normalizzati [0,1].
-    if not is_magnetogram and np.max(images[0]) <= 1:
-        images *= 255
-    
-    tl = 3  # line thickness
-    # ... (codice successivo) ...
-\end{lstlisting}
+    Il flusso originale prevedeva una de-normalizzazione sistematica dei tensori di input (moltiplicazione per 255), assumendo che questi fossero normalizzati nel range \texttt{[0,1]} per la visualizzazione a 8-bit. Sebbene corretta per le immagini, questa operazione altera erroneamente i magnetogrammi. La modifica incapsula questa operazione in un blocco condizionale: la de-normalizzazione viene eseguita solo se il dato non è indicato come scientifico, preservando l'integrità numerica dei magnetogrammi per il successivo rendering.\\
+    Il controllo condizionale è nel Codice \ref{lst:plot_norm} in Appendice \ref{app:codice}.
     \item \textbf{Logica di Rendering Personalizzata per Magnetogrammi}\\
-    Si tratta della modifica più sostanziale. All'interno del ciclo \texttt{for} che processa ogni immagine del batch, è stata inserita una struttura \texttt{if is\_magnetogram}. Se il flag è \texttt{True}, la logica di visualizzazione standard viene saltata e viene eseguito un \textit{processo di rendering} specifico per i dati scientifici:
+    Si tratta dell'intervento più sostanziale. All'interno del ciclo che processa ogni immagine del batch, è stata inserita una diramazione logica. Se il \texttt{flag scientifico} è attivo, la logica di visualizzazione standard viene sostituita da un \textit{processo di rendering} specifico per i dati scientifici:
     \begin{enumerate}
-        \item De-normalizzazione: i dati sono riportati alla loro scala fisica originale (da [0,1] a [-1500,1500]), utilizzando i valori di clipping di \texttt{DatasetH5}.
-        \item Contrasto e Colormap: è applicato un contrasto specifico (-300, 300) e una mappa di colori scientifica denominata \texttt{seismic}, per evidenziare le polarità magnetiche positive in rosso e quelle negative in blu.
-        \item Conversione RGB: l'immagine colorata (che ha 4 canali RGBA) è convertita in un'immagine RGB a 8 bit, pronta per essere disegnata.
-        \item Correzione orientamento: l'immagine è capovolta verticalmente mediante il comando \texttt{cv2.flip(img\_rgb, 0)}, in modo da allinearsi alle convenzioni di visualizzazione astrofisica.
+        \item \textbf{Ripristino della Scala Fisica}: i dati sono riportati alla loro scala fisica originale (da [0,1] a [-1500,1500]), utilizzando i parametri di clipping definiti nel Data Loader.
+        \item \textbf{Mappatura Cromatica}: viene applicata una mappa di colori divergente (denominata \texttt{seismic}), specifica per evidenziare le polarità magnetiche con colori contrastanti (rosso per il positivo e blu per il negativo).
+        \item \textbf{Conversione RGB}: l'immagine colorata (che ha 4 canali RGBA) è convertita in un'immagine RGB a 8 bit, compatibile con le librerie grafiche.
+        \item \textbf{Correzione dell'Orientamento}: l'immagine viene capovolta verticalmente (\textit{flip}) per allinearsi alle convenzioni di visualizzazione astrofisica standard, dove l'asse Y cresce verso l'alto (contrariamente alle immagini digitali).
     \end{enumerate}
-    Il blocco \texttt{else} contiene la logica originale dello script per gestire le immagini standard.
-    \begin{lstlisting}[language=Python, caption={[Logica rendering magnetogrammi in plots.py] Logica condizionale per il rendering dei magnetogrammi. Se is\_magnetogram è True, i dati vengono de-normalizzati, colorati con una mappa 'seismic' e capovolti verticalmente, bypassando la logica di visualizzazione standard.}, label={lst:h5_arg}]
-        # ... (dentro il ciclo for i, img in enumerate(images)) ...
-        
-        # Inizia la logica condizionale basata sul flag
-        if is_magnetogram:
-            # --- Blocco personalizzato per magnetogrammi ---
-            
-            # 1. De-normalizza l'immagine (da [0,1] a [-1500, 1500])
-            #    (img[0] seleziona il singolo canale)
-            magnetogram_data = img[0] * 3000 - 1500
-        
-            # 2. Imposta i limiti di contrasto per la visualizzazione
-            contrast_min = -300
-            contrast_max = 300
-            
-            # 3. Ottiene la colormap 'seismic' (Rosso-Bianco-Blu)
-            cmap = plt.get_cmap('seismic')
-            # 4. Normalizza i dati tra [0,1] in base al contrasto
-            norm = matplotlib.colors.Normalize(vmin=contrast_min, vmax=contrast_max)
-            
-            # 5. Applica la colormap ai dati normalizzati
-            colored_img = cmap(norm(magnetogram_data))
-            # 6. Converte da RGBA [0,1] a RGB [0,255] (formato uint8)
-            img_rgb = (colored_img[:, :, :3] * 255).astype(np.uint8)
-            
-            # 7. Capovolge l'immagine verticalmente (flip Asse X)
-            img = cv2.flip(img_rgb, 0)
-            
-            # 8. Ridimensiona se necessario (come da logica originale)
-            if scale_factor < 1:
-                img = cv2.resize(img, (w, h))
-        else:
-            # --- Blocco Originale per immagini BGR/RGB ---
-            img = img.transpose(1, 2, 0) # Converte da [C, H, W] a [H, W, C]
-            if scale_factor < 1:
-                img = cv2.resize(img, (w, h))
-
-        # Disegna l'immagine (ora in formato RGB) sul mosaico
-        mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
-        # ... (codice successivo)
-\end{lstlisting}
+    Il blocco alternativo mantiene la logica originale per le immagini standard.\\
+    L'algoritmo di rendering e colorazione è dettagliato nel Codice \ref{lst:plot_render} in Appendice \ref{app:codice}.
     \item \textbf{Adattamento delle Coordinate delle Bounding Box}\\
-    Avendo capovolto l'immagine del magnetogramma (\texttt{cv2,flip} nel punto precedente), anche le ordinate Y delle bounding box sono state invertite per corrispondere. Prima che le coordinate vengano disegnate sull'immagine, è stato aggiunto un blocco \texttt{if is\_magnetogram}: esso esegue un'inversione matematica, assicurando che le etichette (sia reali che predette) appaiano nella posizione corretta.
-        \begin{lstlisting}[language=Python, caption={[Inversione coordinate Bounding Box in plots.py] Aggiunta di un blocco condizionale per invertire le coordinate Y delle bounding box. Questa operazione (h - boxes[[1, 3]]) è necessaria per compensare il capovolgimento verticale applicato all'immagine del magnetogramma.}, label={lst:h5_arg}]
-        # ... (codice per il calcolo dei box) ...
-        if boxes.shape[1]:
-            if boxes.max() <= 1.01:
-                boxes[[0, 2]] *= w
-                boxes[[1, 3]] *= h
-            elif scale_factor < 1:
-                boxes *= scale_factor
-            
-        # Aggiunta: Blocco per invertire le coordinate Y se e' un magnetogramma
-        if is_magnetogram:
-            # Inverte le coordinate Y (indice 1 e 3) rispetto all'altezza (h)
-            # Questo compensa il 'cv2.flip(..., 0)' applicato all'immagine
-            boxes[[1, 3]] = h - boxes[[1, 3]]
-
-        # Sposta i box nella loro posizione sul mosaico (logica originale)
-        boxes[[0, 2]] += block_x
-        boxes[[1, 3]] += block_y
-            
-        # ... (codice per disegnare i box) ...
-\end{lstlisting}
+    Come conseguenza diretta dell'inversione verticale dell'immagine del magnetogramma (descritta al punto precedente), anche le ordinate spaziali delle bounding box necessitano di una trasformazione speculare. Prima che le etichette vengano disegnate sull'immagine, è stato aggiunto un blocco di calcolo che esegue un'inversione matematica. Questo assicura che le etichette (sia le predizioni del modello che la \textit{ground truth}) rimangano geometricamente coerenti con la nuova rappresentazione visiva del magnetogramma.\\
+    La correzione delle coordinate delle bounding box è nel Codice \ref{lst:plot_flip} in Appendice \ref{app:codice}.
 \end{itemize}
 
 \section{Approccio alternativo: Pre-conversione del Dataset}
-In alternativa all'adattamento del codice di YOLOv7 (descritto ampiamente nella sezione~\ref{sec:adattamento_yolo}), è stato esplorato un secondo approccio che consiste esattamente nell'operazione inversa: \textit{adattare i dati al framework, piuttosto che il framework ai dati}.\\
-Sostanzialmente, si va a trattare il modello preesistente come una \textit{black box}, lasciandone il codice sorgente inalterato. Per arrivare al conseguimento dell'obiettivo, è stato attuato un processo di pre-conversione in due fasi che trasforma l'intero dataset dal formato \texttt{.h5} in \textbf{formato YOLO}, che sappiamo essere così strutturato:
+In alternativa all'adattamento architetturale di YOLOv7 (descritto ampiamente nella sezione~\ref{sec:adattamento_yolo}), è stato esplorato un approccio metodologico che inverte il paradigma di adattamento: \textit{conformare i dati al framework, piuttosto che il framework ai dati}.\\
+Sostanzialmente, si è scelto di trattare il modello preesistente come una \textit{black box}, lasciandone il codice sorgente inalterato. Per conseguire tale obiettivo, è stato implementato un processo di pre-conversione strutturato in due fasi, volto a trasformare l'intero dataset dal formato gerarchico HDF5 al \textbf{formato YOLO}. Quest'ultimo impone una struttura specifica:
 \begin{itemize}
-    \item Per ogni immagine di un magnetogramma (es. \texttt{immagine\_esempio.jpg}), esiste un file di testo con lo stesso nome (es. \texttt{immagine\_esempio.txt}).
-    \item Ogni riga di quel file \texttt{.txt} rappresenta una singola bounding box presente nella relativa immagine.
+    \item Per ogni magnetogramma (in formato immagine .jpg), deve esistere un file di testo corrispondente con il medesimo identificativo.
+    \item Ogni riga del file testuale rappresenta una singola bounding box presente nella relativa immagine.
     \item Ogni riga è espressa nel formato \\
     \texttt{<class\_id> <x\_centro> <y\_centro> <larghezza> <altezza>}.
 \end{itemize}
-Per lo scopo, è stato sviluppato un processo in due fasi.
+Per lo scopo, è stato sviluppato un flusso di lavoro specifico.
 
-\subsection{Prima Fase: Conversione da Formato H5 a formato YOLO}
-La prima fase è gestita dallo script \texttt{preprocess\_to\_zip.py}, il quale legge l'intero dataset ed esegue, per ogni file, due compiti in parallelo.
+\subsection{Prima Fase: Transcodifica da HDF5 a YOLO}
+La prima fase è governata da una \textbf{routine di elaborazione batch}, progettata per scansionare l'intero archivio dati ed eseguire, su ogni campione scientifico, due flussi di trasformazione paralleli.
 
-\subsubsection{Conversione delle Etichette}
-Analogamente a quanto implementato nella classe \texttt{DatasetH5} (descritta nella sezione~\ref{sec:dataset_h5}), lo script naviga la struttura del file fino alla directory \texttt{/harp/metadata} per estrarre gli attributi di ogni regione attiva. Esegue i medesimi controllo di validità (presenza delle chiavi e dimensioni positive) e calcola le coordinate normalizzate in formato \texttt{centro + dimensioni}. Le coordinate \texttt{[classe, x, y, w, h]} vengono, infine, formattate come stringhe di testo e preparate per essere salvate in un file \texttt{.txt}.
+\subsubsection{Estrazione e Formattazione delle Annotazioni}
+Analogamente a quanto implementato nella logica di caricamento dati (descritta nella sezione~\ref{sec:dataset_h5}), il sistema naviga la struttura  gerarchica del file per recuperare i metadati spaziali di ogni regione attiva. Vengono eseguiti i medesimi controlli di validità (verifica della completezza degli attributi e consistenza dimensionale) e il calcolo delle coordinate normalizzate. Le coordinate risultanti vengono infine serializzate come stringhe di testo e salvate nel file testuale di annotazione corrispondente.
 
-\subsubsection{Conversione dei Dati Immagine}
-Contemporaneamente, lo script processa i dati scientifici grezzi contenuti nella directory \texttt{/magnetogram/data}. Questo processo converte l'informazione scientifica in un'immagine standard, seguendo una serie di passi:
+\subsubsection{Trasformazione e Quantizzazione del Segnale}
+Contestualmente, il modulo processa la matrice dei dati grezzi contenuti nel file scientifico. Questo processo converte l'informazione fisica in un'immagine standard, seguendo una serie di passi:
 \begin{enumerate}
-    \item \textbf{Pulizia}: i valori \texttt{Nan} e \texttt{inf} sono rimossi;
-    \item \textbf{Clipping}: i valori sono clippati nell'intervallo \texttt{[-1500,1500]};
-    \item \textbf{Normalizzazione}: i dati sono normalizzati in un intervallo \texttt{[0.0,1.0]};
-    \item \textbf{Ridimensionamento}: l'immagine è ridimensionata ad un formato 640x640.
+    \item \textbf{Pulizia Dati}: rimozione di valori non validi (\texttt{Nan} e \texttt{inf});
+    \item \textbf{Clipping Fisico}: saturazione dei valori di campo magnetico nell'intervallo di interesse (\texttt{[-1500,1500]});
+    \item \textbf{Normalizzazione Lineare}: riscalamento dei dati nell'intervallo unitario (\texttt{[0.0,1.0]});
+    \item \textbf{Ridimensionamento Spaziale}: interpolazione dell'immagine alla risoluzione target (formato 640x640 pixel).
 \end{enumerate}
-Il \textit{passaggio chiave} avviene subito dopo: i dati \texttt{float} sono convertiti in interi a 8-bit, proprio per "appiattire" la vasta gamma dinamica dei dati scientifici in 256 valori discreti. L'immagine 8-bit viene poi duplicata su 3 canali e codificata come file \texttt{.jpeg}.\\
-Lo script viene eseguito 3 volte, una per ogni cartella di file \texttt{.h5}, per cui i risultati di output sono 3 cartelle: \texttt{Train.zip}, \texttt{Validation.zip} e \texttt{Test.zip}, ognuna delle quali contiene due cartelle \texttt{/images} e \texttt{/labesls}.
-\begin{lstlisting}[language=Python, caption={[Conversione H5 a JPG/TXT in preprocess\_to\_zip.py] Codice sorgente completo dello script di pre-conversione preprocess\_to\_zip.py. Lo script implementa un processo multithread per leggere i file H5, effettuare il pre-processing e la conversione dei dati scientifici in immagini 8-bit e file di etichette .txt, pronti per generare un file .zip.}, label={lst:h5_arg}]
-import h5py # Libreria per leggere e scrivere file HDF5
-import numpy as np # Libreria per il calcolo numerico
-import cv2 # Libreria OpenCV per l'elaborazione delle immagini
-import os # Libreria per interagire con il sistema operativo
-import glob # Libreria per trovare file sul disco tramite pattern
-from tqdm import tqdm # Libreria per mostrare una barra di progresso
-import argparse # Libreria per gestire gli argomenti passati da riga di comando
-import sys # Libreria per interagire con il sistema
-import zipfile # Libreria per creare e scrivere file .zip
-import concurrent.futures # Libreria per la gestione del multithreading
-
-# --- Impostazioni Globali ---
-IMG_SIZE = 640 # Dimensione fissa (larghezza e altezza) delle immagini di output
-CLIP_MIN, CLIP_MAX = -1500, 1500 # Valori minimi e massimi per il clipping dei dati scientifici
-CLASS_ID = 0 # ID di classe fisso per le etichette (abbiamo solo "regioni attive")
-# Numero di thread "lavoratori" da usare per processare i file H5 in parallelo
-N_WORKERS = 32 
-# ---
-
-def process_file_h5(h5_path):
-    """
-    Processa un singolo file H5.
-    Questa funzione legge i dati, estrae le etichette, processa l'immagine,
-    e restituisce i dati pronti per essere scritti nello zip.
-    E' progettata per essere eseguita in un thread separato.
-    """
-    
-    # Estrae il nome base del file (es. 'M_720s_20101210_000000_TAI_20101210_001159_TAI_01300')
-    base_name = os.path.splitext(os.path.basename(h5_path))[0]
-    # Definisce il percorso dell'immagine DENTRO l'archivio .zip
-    img_arcname = os.path.join('images', f"{base_name}.jpg")
-    # Definisce il percorso del file di etichette DENTRO l'archivio .zip
-    label_arcname = os.path.join('labels', f"{base_name}.txt")
-
-    try:
-        # Apre il file H5 in modalita' lettura ('r')
-        with h5py.File(h5_path, 'r') as f:
-            
-            # --- 1. Estrai Dati Immagine ---
-            # Accede al dataset del magnetogramma
-            magnetogram_data = f['magnetogram/data']
-            # Legge le dimensioni originali (altezza, larghezza)
-            orig_h, orig_w = magnetogram_data.shape
-            # Carica l'intero array dei dati in memoria
-            data = magnetogram_data[:]
-
-            # --- 2. Estrai Etichette (Bounding Box) ---
-            # Accede al gruppo dei metadati
-            harp_group = f['harp/metadata']
-            # Lista per contenere le etichette di QUESTA immagine
-            image_labels = []
-            
-            # Itera su ogni regione attiva (HARP) trovata nei metadati
-            for harp_id in harp_group:
-                # Estrae gli attributi della regione corrente
-                harp_attrs = harp_group[harp_id].attrs
-                
-                # Lista delle chiavi necessarie per definire un box
-                required_keys = ['CRPIX1', 'CRPIX2', 'CRSIZE1', 'CRSIZE2']
-                # Controlla se tutte le chiavi necessarie sono presenti
-                if not all(key in harp_attrs for key in required_keys):
-                    continue # Se ne manca una, salta questa etichetta
-
-                # Converte le dimensioni (in pixel) in float
-                w_abs = float(harp_attrs['CRSIZE1'])
-                h_abs = float(harp_attrs['CRSIZE2'])
-
-                # Validazione: scarta etichette con dimensioni non positive
-                if w_abs <= 0 or h_abs <= 0:
-                    continue # Salta questa etichetta
-
-                # Calcola le coordinate normalizzate in formato YOLO (centro_x, centro_y, w, h)
-                x_center_norm = (float(harp_attrs['CRPIX1']) + w_abs / 2) / orig_w
-                y_center_norm = (float(harp_attrs['CRPIX2']) + h_abs / 2) / orig_h
-                width_norm = w_abs / orig_w
-                height_norm = h_abs / orig_h
-
-                # Validazione: scarta etichette il cui centro e' fuori dall'immagine
-                if not (0.0 < x_center_norm < 1.0 and 0.0 < y_center_norm < 1.0):
-                    continue # Salta questa etichetta
-                
-                # Aggiunge l'etichetta valida alla lista
-                image_labels.append([CLASS_ID, x_center_norm, y_center_norm, width_norm, height_norm])
-
-            # --- 3. Processa Immagine (come in DatasetH5) ---
-            # Pulizia: sostituisce NaN e Infinito con 0.0
-            if np.isnan(data).any() or np.isinf(data).any():
-                data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-            
-            # Clipping: "taglia" i valori all'intervallo definito
-            clipped_data = np.clip(data, CLIP_MIN, CLIP_MAX)
-            # Normalizzazione Min-Max: porta i valori nell'intervallo [0.0, 1.0]
-            normalized_data = (clipped_data - CLIP_MIN) / (CLIP_MAX - CLIP_MIN)
-            # Ridimensionamento: porta l'immagine alla dimensione 640x640
-            resized_image = cv2.resize(normalized_data, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
-            
-            # Conversione 8-bit: "appiattisce" i dati float [0,1] in interi [0,255]
-            image_uint8 = (resized_image * 255.0).astype(np.uint8)
-            # Conversione 3 Canali: duplica il canale unico per creare un'immagine RGB
-            image_rgb = np.stack([image_uint8] * 3, axis=-1)
-            
-            # Codifica in memoria: converte l'array NumPy in un formato JPG (binario)
-            is_success, img_buffer = cv2.imencode('.jpg', image_rgb)
-            if not is_success:
-                # Se la codifica fallisce, solleva un'eccezione
-                raise Exception("Impossibile codificare l'immagine in JPG.")
-            
-            # --- 4. Prepara Etichette (Formato TXT) ---
-            # Crea una lista di stringhe, una per ogni etichetta
-            label_lines = [f"{lbl[0]} {lbl[1]} {lbl[2]} {lbl[3]} {lbl[4]}" for lbl in image_labels]
-            # Unisce le stringhe con un "a capo", pronto per essere scritto su file
-            label_content = "\n".join(label_lines)
-            
-            # Restituisce tutti i dati necessari al thread principale per la scrittura
-            return (img_arcname, img_buffer.tobytes(), label_arcname, label_content)
-
-    except Exception as e:
-        # Gestione degli errori (es. file H5 corrotto)
-        print(f"\nATTENZIONE: Fallimento nel processare {h5_path}: {e}")
-        # Crea un'immagine nera (placeholder)
-        placeholder_img = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
-        # Codifica l'immagine nera
-        is_success, img_buffer = cv2.imencode('.jpg', placeholder_img)
-        # Restituisce l'immagine nera e un file etichette vuoto
-        return (img_arcname, img_buffer.tobytes(), label_arcname, "")
-
-
-def main():
-    """
-    Funzione principale che orchestra il processo.
-    Gestisce gli argomenti da riga di comando, trova i file,
-    avvia il ThreadPool ed esegue la scrittura del file .zip.
-    """
-    
-    # Configura il parser per gli argomenti da riga di comando
-    parser = argparse.ArgumentParser(description="Converte il dataset H5 in un singolo file .zip in formato YOLO (multithread).")
-    parser.add_argument('--source-dir', type=str, required=True, help="Cartella locale contenente i file .h5")
-    parser.add_argument('--zip-file', type=str, required=True, help="Percorso del file .zip di output")
-    parser.add_argument('--workers', type=int, default=N_WORKERS, help="Numero di thread 'produttori'")
-    args = parser.parse_args() # Legge gli argomenti forniti dall'utente
-
-    # Trova tutti i file .h5 nella cartella sorgente (anche sottocartelle)
-    h5_files = sorted(glob.glob(os.path.join(args.source_dir, '**', '*.h5'), recursive=True))
-    if not h5_files:
-        # Se non trova file, stampa un errore ed esce
-        print(f"Errore: Nessun file .h5 trovato in {args.source_dir}")
-        sys.exit(1)
-        
-    print(f"Trovati {len(h5_files)} file .h5. Avvio della conversione in '{args.zip_file}'...")
-    print(f"Uso di {args.workers} thread lavoratori.")
-
-    # Crea e gestisce un pool di thread (max 'args.workers' thread attivi contemporaneamente)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-        
-        # Apre il file .zip in modalita' scrittura ('w') con compressione
-        with zipfile.ZipFile(args.zip_file, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            
-            # Sottomette tutti i lavori (chiama 'process_file_h5' per ogni file)
-            # 'futures' e' una lista di "promesse" di risultati futuri
-            futures = [executor.submit(process_file_h5, h5_path) for h5_path in h5_files]
-            
-            # Il thread principale (questo) ora itera sui risultati man mano che
-            # i thread "lavoratori" li completano (non in ordine di invio)
-            # 'tqdm' crea una barra di progresso per questa iterazione
-            for future in tqdm(concurrent.futures.as_completed(futures), total=len(h5_files), desc="Conversione in corso"):
-                
-                # Ottiene il risultato dal thread completato
-                result = future.result()
-                
-                if result:
-                    # Estrae i dati restituiti dalla funzione
-                    img_arcname, img_buffer, label_arcname, label_content = result
-                    
-                    # Scrive l'immagine (binaria) nel file .zip
-                    zf.writestr(img_arcname, img_buffer)
-                    # Scrive le etichette (testo) nel file .zip
-                    zf.writestr(label_arcname, label_content)
-
-    print("\nConversione completata.")
-    print(f"Il file '{args.zip_file}' e' stato creato con successo.")
-
-# Questo blocco assicura che la funzione 'main()' sia eseguita
-# solo quando lo script e' avviato direttamente (non se importato)
-if __name__ == "__main__":
-    main()
-\end{lstlisting}
+Il \textit{passaggio chiave} avviene al termine di questa catena: i dati in virgola mobile (\texttt{float}) vengono convertiti in interi a 8-bit. Questa operazione di \textit{quantizzazione} riduce la vasta gamma dinamica dei dati scientifici in 256 valori discreti, rendendoli compatibili con i formati immagine standard. Il risultato viene duplicato su tre canali e codificato con compressione JPEG.\\
+La procedura viene reiterata per le tre partizioni del dataset, producendo in output tre archivi distinti, ciascuno organizzato secondo la gerarchia standard di cartelle richiesta dal framework.\\
+Il codice completo della procedura di conversione è riportato nel Codice \ref{lst:script_preprocess} in Appendice \ref{app:codice}.
 
 \subsection{Seconda Fase: Post-Processing e Mascheramento dello Sfondo}
-Il processo di conversione appena descritto introduce un \textit{artefatto visivo} problematico. I valori \texttt{NaN} dello sfondo (esterni al disco solare) sono convertiti in \texttt{0.0} ma, in seguito alla normalizzazione Min-Max, diventa \texttt{0.5} che, nella conversione finale a 8-bit, corrisponde ad un \textbf{grigio medio} (valore 127.)\\
-Il risultato è un'immagine in cui lo sfondo è indistinguibile dal disco solare (esso stesso in scala di grigi), introducendo rumore e rendendo inefficace l'addestramento, come si può constatare chiaramente nella figura~\ref{fig:artefatto_grigio}.
+La procedura di conversione appena descritta introduce un \textit{artefatto sistematico} legato alla gestione dei valori nulli dello sfondo. Durante la fase di pre-processing, i valori esterni al disco solare (\texttt{NaN}) vengono sostituiti con il valore neutro \texttt{0.0}. A seguito della normalizzazione Min-Max nell'intervallo \texttt{[-1500,1500]}, tale valore zero si colloca al centro del range dinamico \texttt{0.5} che, nella conversione finale a 8-bit, viene mappato nel valore 127.\\
+Il risultato è un'immagine in cui lo sfondo, anziché essere nero, appare come un \textbf{grigio medio}, risultando indistinguibile dalle aree inattive del disco solare stesso (anch'esso rappresentato in scala di grigi). Questa ambiguità visiva riduce drasticamente il contrasto e introduce rumore di fondo che compromette la convergenza dell'addestramento, come evidenziato in figura~\ref{fig:artefatto_grigio}.
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.7\textwidth]{Figs/Cap3/esempio_con_artefatto.jpg}
-  \caption[Artefatto di conversione H5 (sfondo grigio)] 
-  {Esempio visivo dell'artefatto generato dallo script preprocess\_to\_zip.py. Come si può osservare, lo sfondo è un grigio medio, rendendo il confine del disco solare (anch'esso in scala di grigi) visivamente ambiguo. Questa mancanza di un bordo netto introduce rumore nell'addestramento.}
+  \includegraphics[width=0.5\textwidth]{Figs/Cap3/esempio_con_artefatto.jpg}
+  \caption[Artefatto di conversione H5] 
+  {Esempio visivo dell'artefatto generato dalla routine di conversione primaria. Come si può osservare, lo sfondo è renderizzato come un grigio medio, rendendo il confine del disco solare (anch'esso in scala di grigi) visivamente ambiguo. Questa mancanza di bordo netto introduce rumore spuro nel dataset.}
   \label{fig:artefatto_grigio}
 \end{figure}
-Per risolvere questo problema, è stato implementato un secondo script di post-processing, \texttt{convert.py}, il cui scopo è isolare il disco solare, forzando lo sfondo esterno ad un nero puro (di valore 0).\\
-Questo script esegue le seguenti operazioni su ciascuna immagine \texttt{.jpg} generata:
+Per risolvere questa criticità, è stato implementato un \textbf{modulo di filtraggio ottico} (post-processing), il cui scopo è isolare geometricamente il disco solare, forzando lo sfondo esterno ad un valore di nero assoluto (0).\\
+La procedura esegue le seguenti operazioni su ciascun campione generato:
 \begin{enumerate}
-    \item \textbf{Calcolo del Raggio}: identifica il centro dell'immagine e calcola un raggio basato sulla dimensione minore, ridotto di un \texttt{FATTORE\_RAGGIO} (impostato a 0.96) per escludere i bordi rumorosi.
-    \item \textbf{Creazione Maschera}: crea una maschera completamente nera delle dimensioni dell'immagine.
-    \item \textbf{Disegno del Disco}: disegna un cerchio pieno bianco sulla maschera, corrispondente all'area in cui è presente il disco solare da preservare.
-    \item \textbf{Mascheramento}: esegue un'operazione logica tra l'immagine originale e la maschera, rendendo neri tutti i pixel al di fuori del cerchio bianco.
+    \item \textbf{Definizione Geometrica del Raggio}: il sistema identifica il centro dell'immagine e calcola il raggio ottimale basandosi sulla dimensione minore del fotogramma. Tale raggio viene ridotto di un \textit{fattore percentuale} (impostato al 96\%) per escludere i bordi rumorosi.
+    \item \textbf{Generazione della Maschera}: viene inizializzata una matrice binaria (\textit{maschera}) completamente nera, avente le medesime dimensioni dell'immagine target.
+    \item \textbf{Delimitazione della ROI}: sulla maschera viene disegnato un cerchio bianco pieno (valore 1), corrispondente alla Regione di Interesse (ROI) che contiene il disco solare da preservare.
+    \item \textbf{Applicazione del Filtro}: viene eseguita un'operazione logica bit-a-bit (\textit{bitwise AND}) tra l'immagine originale e la maschera. Questa operazione preserva i pixel all'interno della ROI e azzera forzatamente tutti i pixel esterni, ripristinando il nero puro.
 \end{enumerate}
-\begin{lstlisting}[language=Python, caption={[Pulizia sfondo con maschera circolare in convert.py] Codice sorgente completo dello script di post-processing convert.py. Una maschera circolare viene creata e applicata tramite cv2.bitwise\_and per rimuovere lo sfondo grigio (un artefatto della conversione H5), isolando il disco solare. Questo passaggio e' necessario per pulire l'output dello script preprocess\_to\_zip.py.}, label={lst:h5_arg}]
-# Importa la libreria OpenCV per l'elaborazione delle immagini
-import cv2
-# Importa la libreria NumPy per il calcolo numerico e la gestione degli array
-import numpy as np
-# Importa la libreria per interagire con il sistema operativo
-import os
-# Importa la libreria per cercare file sul disco che corrispondono a un pattern
-import glob
-
-# --- Impostazioni ---
-# Definisce il percorso da cui leggere le immagini originali (con sfondo grigio)
-CARTELLA_INPUT = 'Validation/images_original'
-# Definisce il percorso in cui salvare le immagini pulite (con sfondo nero)
-CARTELLA_OUTPUT = 'Validation/images'
-
-# Percentuale del raggio. 1.0 = fino al bordo.
-# 0.96 taglia via i bordi rumorosi/sfumati e lo sfondo.
-FATTORE_RAGGIO = 0.96 
-# --------------------
-
-# Crea la cartella di output se non esiste
-# Controlla se la cartella di output non esiste gia'
-if not os.path.exists(CARTELLA_OUTPUT):
-    # Crea la cartella di output (e tutte le cartelle intermedie necessarie)
-    os.makedirs(CARTELLA_OUTPUT)
-    # Stampa un messaggio di conferma della creazione
-    print(f"Cartella '{CARTELLA_OUTPUT}' creata.")
-
-# Cerca tutti i file immagine (anche nelle sottocartelle)
-# Definisce una tupla di estensioni di file immagine da cercare
-tipi_file = ('*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tif')
-# Inizializza una lista vuota per contenere i percorsi dei file trovati
-file_immagini = []
-# Avvia un ciclo per ogni estensione definita in 'tipi_file'
-for tipo in tipi_file:
-    # Cerca (ricorsivamente, '**') i file che corrispondono al pattern e li aggiunge alla lista
-    file_immagini.extend(glob.glob(os.path.join(CARTELLA_INPUT, '**', tipo), recursive=True))
-
-# Controlla se sono stati trovati file
-# Controlla se la lista 'file_immagini' e' vuota (nessun file trovato)
-if not file_immagini:
-    # Stampa un messaggio di avviso se non sono state trovate immagini
-    print(f"Nessuna immagine trovata nella cartella '{CARTELLA_INPUT}'.")
-    # Stampa un suggerimento per l'utente
-    print("Assicurati di aver creato una cartella 'input' e di averci messo le tue immagini.")
-# Blocco eseguito se almeno un'immagine e' stata trovata
-else:
-    # Stampa il numero di immagini trovate e avvia l'elaborazione
-    print(f"Trovate {len(file_immagini)} immagini. Inizio elaborazione...")
-
-# Elabora ogni immagine
-# Avvia un ciclo che itera su ogni percorso di file trovato
-for percorso_immagine in file_immagini:
-    # Carica l'immagine originale
-    # Legge il file immagine dal disco e lo carica in un array NumPy
-    img_originale = cv2.imread(percorso_immagine)
-    
-    # Controlla se il caricamento dell'immagine e' fallito (es. file corrotto)
-    if img_originale is None:
-        # Stampa un messaggio di errore specificando il file
-        print(f"Errore: Impossibile caricare l'immagine {percorso_immagine}")
-        # Interrompe questa iterazione del ciclo e passa al file successivo
-        continue
-        
-    # Ottieni le dimensioni dell'immagine
-    # Estrae l'altezza ('h') e la larghezza ('w') dalle dimensioni dell'array immagine
-    h, w = img_originale.shape[:2]
-
-    # Calcola il centro e il raggio
-    # Calcola la coordinata X del centro dell'immagine (divisione intera)
-    centro_x = w // 2
-    # Calcola la coordinata Y del centro dell'immagine (divisione intera)
-    centro_y = h // 2
-    
-    # Calcola il raggio basandoti sulla dimensione piu' piccola
-    # Trova il raggio massimo possibile (basato sul lato piu' corto dal centro)
-    raggio_base = min(centro_x, centro_y)
-    # e applica il fattore per escludere i bordi (es. 0.96) e converte in intero
-    raggio = int(raggio_base * FATTORE_RAGGIO)
-
-    # 1. Crea una maschera completamente nera
-    # (della stessa dimensione e tipo dell'originale)
-    # Crea un array NumPy pieno di zeri (nero) con le stesse dimensioni di 'img_originale'
-    maschera = np.zeros_like(img_originale)
-
-    # 2. Disegna un cerchio pieno bianco sulla maschera
-    # Questo cerchio rappresenta l'area che vogliamo conservare
-    # Disegna un cerchio bianco pieno sulla maschera
-    cv2.circle(maschera, (centro_x, centro_y), raggio, (255, 255, 255), thickness=cv2.FILLED)
-
-    # 3. Applica la maschera all'immagine originale
-    # cv2.bitwise_and mantiene solo i pixel dove entrambe
-    # le immagini (originale e maschera) sono non-nere.
-    # Esegue un'operazione AND bit-per-bit. I pixel fuori dal cerchio (dove la maschera e' 0) diventano 0.
-    risultato = cv2.bitwise_and(img_originale, maschera)
-
-    # Costruisci il percorso di output mantenendo la struttura
-    # Calcola il percorso relativo del file (es. 'sottocartella/img.jpg')
-    percorso_relativo = os.path.relpath(percorso_immagine, CARTELLA_INPUT)
-    # Ricostruisce il percorso di destinazione nella cartella di output
-    percorso_output = os.path.join(CARTELLA_OUTPUT, percorso_relativo)
-    
-    # Estrae il percorso della cartella di destinazione (es. 'Validation/images/sottocartella')
-    cartella_destinazione = os.path.dirname(percorso_output)
-    # Controlla se la cartella di destinazione (per le sottocartelle) non esiste
-    if not os.path.exists(cartella_destinazione):
-        # Crea la sottocartella di destinazione se necessario
-        os.makedirs(cartella_destinazione)
-
-    # Salva l'immagine modificata
-    # Salva l'array 'risultato' (l'immagine mascherata) sul disco nel percorso di output
-    cv2.imwrite(percorso_output, risultato)
-    
-# Stampa un messaggio finale al termine di tutti i cicli
-print(f"\nElaborazione completata. Immagini salvate in '{CARTELLA_OUTPUT}'.")
-\end{lstlisting}
-Solo dopo aver eseguito \texttt{convert.py}, è possibile notare un netto miglioramento, come si può evincere dalla figura~\ref{fig:immagine_mascherata}
+L'algoritmo per l'applicazione della maschera circolare è consultabile nel Codice \ref{lst:script_convert} in Appendice \ref{app:codice}.\\
+L'efficacia di questo intervento è immediata: il mascheramento ripristina il corretto rapporto segnale-rumore, garantendo che la rete neurale processi esclusivamente le informazioni pertinenti, come mostrato in figura~\ref{fig:immagine_mascherata}
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.7\textwidth]{Figs/Cap3/esempio_mascherato.jpg}
+  \includegraphics[width=0.5\textwidth]{Figs/Cap3/esempio_mascherato.jpg}
   \caption[Risultato della maschera circolare] 
-  {Risultato dell'applicazione dello script convert.py sull'immagine affetta da artefatti (mostrata nella figura~\ref{fig:artefatto_grigio}). L'operazione di mascheramento ha rimosso con successo lo sfondo grigio, forzandolo a nero puro (valore 0). L'immagine ora presenta un contrasto netto tra il disco solare e lo sfondo, fornendo un input di addestramento pulito e privo di rumore.}
+  {Risultato dell'applicazione del modulo di mascheramento sull'immagine precedentemente affetta da artefatti (mostrata nella figura~\ref{fig:artefatto_grigio}). L'operazione ha rimosso con successo lo sfondo grigio, forzandolo a nero puro. L'immagine ora presenta un contrasto netto tra il disco solare e lo sfondo, fornendo un input di addestramento pulito e privo di ambiguità.}
   \label{fig:immagine_mascherata}
 \end{figure}
 
 \section{Tracking Multi-Oggetto con Norfair}
-Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale. Prendendo come base lo script dimostrativo ufficiale fornito da Norfair per l'integrazione con YOLOv7, è stato sviluppato lo script \texttt{track.py}, con una logica implementativa che si adatta con coerenza allo scopo. L'intera sezione, quindi, descrive la struttura di tale script per il tracciamento multi-oggetto su una sequenza di magnetogrammi.
+Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale.

@@ -155,6 +155,7 @@ Nel progetto sviluppato, svolge il ruolo chiave di "inseguire" le regioni attive
   \includegraphics[width=0.5\textwidth]{Figs/Cap2/logo_norfair.png}
   \caption{Logo di Norfair}
 \end{figure}
+La libreria è organizzata in moduli che separano la logica di tracking, la gestione dei video e il calcolo delle metriche di valutazione.
 
 \subsection{Funzionamento Principale}
 Il funzionamento di Norfair si basa sui seguenti \textit{concetti chiave}:
@@ -165,16 +166,6 @@ Il funzionamento di Norfair si basa sui seguenti \textit{concetti chiave}:
   \item \textbf{Assegnazione}: ogni nuova detection viene assegnata alla traccia più vicina purché la distanza sia inferiore a una soglia predefinita (\textit{distance threshold}); in caso contrario, viene creata una nuova traccia.
 \end{itemize}
 Ad ogni nuovo fotogramma, Norfair riceve l’elenco delle detections, aggiorna le tracce esistenti o ne crea di nuove e rimuove quelle non aggiornate per un certo numero di frame, garantendo così un tracking coerente anche in presenza di occlusioni temporanee o movimenti rapidi.
-
-\subsection{Struttura del progetto}
-La struttura della repository ufficiale della libreria Norfair (\url{https://github.com/tryolabs/norfair}) è organizzata come segue:
-\begin{itemize}
-  \item \texttt{norfair/}: codice sorgente principale della libreria che implementa la logica di tracking (\texttt{tracker.py}), la gestione di flussi video e visualizzazione dei risultati (\texttt{video.py}) e le metriche di valutazione di prestazioni di tracking ad esempio accuratezza e precisione (\texttt{metrics.py}).
-  \item \texttt{demos/}: esempi pratici di integrazione con vari rilevatori come YOLOv5 e Detectron2, che facilitano l’utilizzo in scenari reali.
-  \item \texttt{docs/}: documentazione dettagliata della libreria.
-  \item \texttt{tests/}: suite di test automatici per assicurare la correttezza e stabilità del codice.
-  \item File di configurazione per gestione dipendenze, controllo qualità e continuous integration.
-\end{itemize}
 
 \subsection{Caratteristiche principali}
 \begin{itemize}
@@ -216,6 +207,7 @@ Le principali caratteristiche del modello includono:
   \item Ottimizzazione per GPU CUDA, che consente un'inferenza efficiente su hardware NVIDIA.
   \item Possibilità di usare \emph{multi-head} per compiti multitask (ad esempio detection + keypoints).
 \end{itemize}
+L'architettura del modello separa nettamente le configurazioni dei modelli (iperparametri e anchor) dai pesi pre-addestrati e dagli script di inferenza e training.
 
 \subsection{Funzionamento}
 Il modello, durante l'inferenza, elabora un’immagine, suddividendola in griglie e applicando convoluzioni profonde per produrre:
@@ -225,23 +217,6 @@ Il modello, durante l'inferenza, elabora un’immagine, suddividendola in grigli
   \item La probabilità associata a ciascuna predizione.
 \end{itemize}
 In fase di addestramento, YOLOv7 utilizza tecniche avanzate di ottimizzazione che migliorano l’apprendimento, senza aumentare la complessità dell’inferenza \cite{wang2022yolov7}.
-
-\subsection{Struttura del progetto}
-La struttura della repository ufficiale (\url{https://github.com/WongKinYiu/yolov7}) è composta da diverse cartelle e script, ciascuno con un ruolo specifico:
-\begin{itemize}
-  \item \texttt{cfg/}: contiene i file di configurazione (\texttt{.yaml} e \texttt{.cfg}) relativi all’architettura del modello. Ogni file definisce la struttura dei layer (es. convoluzionali, bottleneck) per varianti come \texttt{YOLOv7}, \texttt{YOLOv7-Tiny}, ecc.
-  \item \texttt{data/}: definisce i dataset utilizzati per l’addestramento, le classi da rilevare e le directory contenenti immagini e annotazioni.
-  \item \texttt{models/}: contiene il codice Python per l’implementazione delle architetture neurali, includendo moduli per i backbone e le detection head.
-  \item \texttt{tools/}: include script ausiliari per la conversione di modelli (es. in formato ONNX), calcolo del numero di operazioni (FLOPs), e benchmarking.
-  \item \texttt{figures/}: diagrammi esplicativi dell’architettura e delle innovazioni introdotte.
-\end{itemize}
-Gli script principali della repository sono:
-\begin{itemize}
-  \item \texttt{train.py}: script principale per l’addestramento del modello su dataset personalizzati o standard.
-  \item \texttt{detect.py}: esegue l’inferenza su immagini, video o webcam.
-  \item \texttt{test.py}: valuta le prestazioni del modello su un dataset di test.
-  \item \texttt{export.py}: converte il modello in formato ONNX o altri per l’inferenza su dispositivi edge.
-\end{itemize}
 
 \subsection{Applicazioni}
 YOLOv7 trova impiego in numerosi ambiti, tra cui:

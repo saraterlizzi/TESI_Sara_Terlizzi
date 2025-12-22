@@ -16,6 +16,7 @@
 \usepackage{csquotes}
 \usepackage{float}
 \usepackage{listings}
+\usepackage[titletoc,title]{appendix}
 \usepackage{xcolor}
 \graphicspath{ {./Figs/} }
 \usepackage[hyperindex]{hyperref} %per l'indice interattivo
@@ -105,8 +106,8 @@
 \Facolta{Scuola interdipartimentale delle Scienze, dell'Ingegneria e della Salute}
 \Dipartimento{Dipartimento di Scienze e Tecnologie}
 \CorsoDiLaurea{Corso di Laurea Triennale in Informatica}
-\AnnoAccademico{Anno Accademico 2025/2026}
-\Titolo{IDENTIFICAZIONE E TRACCIAMENTO DELL'EVOLUZIONE DI FLARE SOLARE}
+\AnnoAccademico{Anno Accademico 2024/2025}
+\Titolo{IDENTIFICAZIONE E TRACCIAMENTO DELLE REGIONI ATTIVE SUL SOLE}
 \Relatore{\textsc{Prof. Emanuel Di Nardo}}
 \RelatoreLabel{\textsc{Relatore}} %optional, default: Relatore
 %\relandcorrelsep{2em} %optional, vertical space between relatori and correlatori default: 1.5ex
@@ -194,6 +195,11 @@
     \input{Chapters/3_applicazione}
     \input{Chapters/4_risultati}
     \input{Chapters/5_conclusioni}
+    % --- INIZIO APPENDICE ---
+    \cleardoublepage
+    \appendix % Dice a LaTeX che da qui iniziano le lettere A, B, C...
+    \input{Chapters/appendice} % Carica il file fisico
+    % --- FINE APPENDICE ---
     \bibliographystyle{apalike}
     
     

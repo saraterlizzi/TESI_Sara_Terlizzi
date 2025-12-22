@@ -1,0 +1,756 @@
+\chapter{Codice Sorgente}
+\label{app:codice}
+
+In questa appendice sono riportati i codici sorgente completi sviluppati per il progetto.
+
+\section{Data Loader Custom}
+\begin{lstlisting}[language=Python, caption={Classe DatasetH5 per il caricamento dei file .h5}, label={lst:dataset_h5_full}]
+# --- BLOCCO IMPORTAZIONI ---
+import torch  # Libreria principale per il deep learning.
+from torch.utils.data import Dataset  # Classe base di PyTorch per creare dataset personalizzati.
+import h5py  # Libreria specifica per leggere file in formato HDF5.
+import numpy as np  # Libreria per il calcolo numerico, usata per manipolare gli array di dati.
+import cv2  # Libreria OpenCV per operazioni sulle immagini, come il ridimensionamento.
+import os  # Libreria per interagire con il sistema operativo.
+import glob  # Libreria per trovare file che corrispondono a un pattern.
+from tqdm import tqdm  # Libreria per gestire visivamente barre di avanzamento.
+
+# --- DEFINIZIONE DELLA CLASSE DATASET ---
+# Eredita da 'Dataset' di PyTorch per integrarsi con i suoi strumenti, come il DataLoader.
+class DatasetH5(Dataset):
+    # --- METODO COSTRUTTORE (`__init__`) ---
+    # Viene eseguito una sola volta all'inizio. Prepara il dataset.
+    def __init__(self, path, img_size=640, clip_range=(-1500, 1500)):
+        # Salva i parametri di configurazione come attributi della classe.
+        self.img_size = img_size  # Dimensione finale delle immagini.
+        self.clip_min, self.clip_max = clip_range  # Intervallo per il clipping dei valori dei pixel.
+        self.class_id = 0  # ID di classe fisso (0), dato che abbiamo solo una classe ("regione attiva").
+        
+        # --- LOGICA DI CACHING ---
+        # Definisce una sottocartella 'cache' dove verranno salvati i dati pre-elaborati.
+        cache_dir = 'cache'
+        # Crea la cartella 'cache' se non esiste gia'. 'exist_ok=True' evita errori se la cartella esiste.
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Costruisce un nome univoco per i file di cache basato sul nome della cartella dei dati (es. "Train" o "Validation").
+        cache_name = os.path.basename(os.path.normpath(path))
+        # Crea il percorso completo per il file di cache delle etichette (es. 'cache/Train_labels.npy').
+        label_cache = os.path.join(cache_dir, f'{cache_name}_labels.npy')
+        # Crea il percorso completo per il file di cache delle dimensioni originali delle immagini.
+        shape_cache = os.path.join(cache_dir, f'{cache_name}_shapes.npy')
+
+        # Cerca tutti i file .h5 nel percorso dato, li ordina e ne salva la lista.
+        self.h5_files = sorted(glob.glob(os.path.join(path, '*.h5')))
+        # Salva il numero totale di file trovati.
+        self.n = len(self.h5_files)
+
+        # Controlla se entrambi i file di cache esistono gia'.
+        if os.path.exists(label_cache) and os.path.exists(shape_cache):
+            # --- CARICAMENTO VELOCE DA CACHE (AVVII SUCCESSIVI) ---
+            print(f"Caricamento rapido da cache per '{cache_name}'...")
+            # Carica l'array delle etichette dal file .npy. 
+            # 'allow_pickle=True' e' necessario perche' le etichette sono in una lista di array.
+            self.labels = np.load(label_cache, allow_pickle=True)
+            # Carica l'array delle dimensioni dal file .npy.
+            self.shapes = np.load(shape_cache)
+            print(f"Cache caricata per {len(self.labels)} file. Avvio del training...")
+        else:
+            # --- CREAZIONE DELLA CACHE (PRIMO AVVIO LENTO) ---
+            print(f"Cache non trovata. Creazione della cache per '{cache_name}' (lento solo la prima volta)...")
+            
+            # Inizializza le liste che conterranno i dati estratti.
+            self.labels = []
+            self.shapes = []
+            bad_labels_count = 0  # Contatore per le etichette scartate.
+            
+            # Itera su ogni file .h5 trovato, mostrando una barra di avanzamento.
+            for h5_path in tqdm(self.h5_files, desc=f"Caching metadata from {path}"):
+                try:  # Blocco per gestire errori di lettura dei singoli file.
+                    # Apre il file .h5 in modalita' lettura. 'with' assicura la chiusura automatica.
+                    with h5py.File(h5_path, 'r') as f:
+                        # Estrae il dataset del magnetogramma.
+                        magnetogram_data = f['magnetogram/data']
+                        # Legge le dimensioni originali (altezza, larghezza).
+                        orig_h, orig_w = magnetogram_data.shape
+                        # Aggiunge le dimensioni alla lista 'self.shapes'.
+                        self.shapes.append([orig_h, orig_w])
+
+                        # Accede al gruppo dei metadati HARP.
+                        harp_group = f['harp/metadata']
+                        image_labels = []  # Lista temporanea per le etichette di questa immagine.
+                        
+                        # Itera su ogni regione attiva trovata nei metadati.
+                        for harp_id in harp_group:
+                            # Estrae gli attributi della regione attiva corrente.
+                            harp_attrs = harp_group[harp_id].attrs
+                            
+                            # Definisce le chiavi necessarie per calcolare una bounding box.
+                            required_keys = ['CRPIX1', 'CRPIX2', 'CRSIZE1', 'CRSIZE2']
+                            # Controlla se tutti gli attributi necessari sono presenti.
+                            if not all(key in harp_attrs for key in required_keys):
+                                continue  # Se ne manca uno, salta questa regione.
+
+                            # Converte le dimensioni in numeri decimali.
+                            w_abs = float(harp_attrs['CRSIZE1'])
+                            h_abs = float(harp_attrs['CRSIZE2'])
+
+                            # Controlla che le dimensioni siano positive.
+                            if w_abs <= 0 or h_abs <= 0:
+                                bad_labels_count += 1
+                                continue  # Se non lo sono, scarta l'etichetta.
+
+                            # Calcola le coordinate del centro e le dimensioni, normalizzandole rispetto alle dimensioni dell'immagine 
+                            x_center_norm = float(harp_attrs['CRPIX1'] + w_abs / 2) / orig_w
+                            y_center_norm = float(harp_attrs['CRPIX2'] + h_abs /2) / orig_h
+                            width_norm = w_abs / orig_w
+                            height_norm = h_abs / orig_h
+
+                            # Controlla che il centro della bounding box sia dentro l'immagine.
+                            if not (0.0 < x_center_norm < 1.0 and 0.0 < y_center_norm < 1.0):
+                                bad_labels_count += 1
+                                continue  # Se e' fuori, scarta l'etichetta.
+                            
+                            # Aggiunge l'etichetta valida (formato YOLO) alla lista temporanea.
+                            image_labels.append([self.class_id, x_center_norm, y_center_norm, width_norm, height_norm])
+                        
+                        # Aggiunge le etichette di questa immagine alla lista principale.
+                        self.labels.append(np.array(image_labels, dtype=np.float32) if image_labels else np.empty((0, 5), dtype=np.float32))
+
+                except Exception as e:  # Se si verifica un errore grave durante la lettura.
+                    print(f"Errore grave durante la lettura del file {h5_path}: {e}")
+                    # Aggiunge placeholder per mantenere l'allineamento degli indici.
+                    self.labels.append(np.empty((0, 5), dtype=np.float32))
+                    self.shapes.append([0, 0])
+
+            # Stampa un riepilogo delle etichette scartate, se ce ne sono.
+            if bad_labels_count > 0:
+                print(f"ATTENZIONE: Trovate e scartate {bad_labels_count} etichette corrotte.")
+
+            # Converte la lista di liste 'self.shapes' in un unico array NumPy.
+            self.shapes = np.array(self.shapes, dtype=np.float64)
+            
+            # SALVA I DATI PROCESSATI NELLA CACHE PER USO FUTURO.
+            print(f"Salvataggio della cache in '{path}'...") # NOTA: Stampa il percorso dei dati, non della cache
+            np.save(label_cache, self.labels)  # Salva le etichette.
+            np.save(shape_cache, self.shapes)  # Salva le dimensioni.
+            print("Cache creata. I prossimi avvii saranno istantanei.")
+
+    # --- METODO `__len__` ---
+    # Restituisce il numero totale di campioni nel dataset.
+    def __len__(self):
+        return self.n  # Restituisce il numero di file contati all'inizio.
+
+    # --- METODO `__getitem__` ---
+    # Carica e restituisce un singolo campione (immagine + etichetta) dato un indice.
+    def __getitem__(self, index):
+        # Ottiene percorso e etichette pre-caricate per l'indice richiesto.
+        h5_path = self.h5_files[index]
+        labels_tensor = torch.from_numpy(self.labels[index])
+        
+        try:  # Blocco per gestire errori di apertura file (es. file corrotti).
+            # Tenta di aprire il file H5 e leggere i dati dell'immagine.
+            with h5py.File(h5_path, 'r') as f:
+                data = f['magnetogram/data'][:]  # Carica l'intero array in memoria.
+
+            # Pulisce i dati da eventuali valori non numerici (NaN/inf).
+            if np.isnan(data).any() or np.isinf(data).any():
+                data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+            
+            # Pre-processa l'immagine: clipping, normalizzazione e ridimensionamento.
+            clipped_data = np.clip(data, self.clip_min, self.clip_max)
+            normalized_data = (clipped_data - self.clip_min) / (self.clip_max - self.clip_min)
+            resized_image = cv2.resize(normalized_data, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            
+            # Converte a 3 canali (duplicando il canale unico) per compatibilita' con YOLOv7.
+            image_rgb = np.stack([resized_image] * 3, axis=-1)
+            # Converte l'array NumPy in un tensore PyTorch e riordina le dimensioni in [C, H, W].
+            image_tensor = torch.from_numpy(image_rgb.transpose(2, 0, 1)).float()
+            
+            # Restituisce il campione completo.
+            return image_tensor, labels_tensor, h5_path, self.shapes[index]
+
+        except Exception as e:  # Se si verifica un qualsiasi errore durante il caricamento.
+            # Stampa un avviso e ignora il dato corrotto.
+            print(f"\nATTENZIONE: Ignorato file corrotto o illeggibile: {os.path.basename(h5_path)}")
+            
+            # Restituisce un'immagine nera per non interrompere il training.
+            placeholder_image = torch.zeros((3, self.img_size, self.img_size))
+            return placeholder_image, labels_tensor, h5_path, self.shapes[index]
+\end{lstlisting}
+
+\section{Modifiche a train.py}
+\begin{lstlisting}[language=Python, caption={Importazione in train.py}, label={lst:train_import}]
+# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
+from utils.dataset_h5 import DatasetH5
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Funzione Collate per il Training}, label={lst:train_collate}]
+# Funzione custom per raggruppare campioni in un batch. Aggiunge l'indice del batch a ogni etichetta per l'associazione.
+def h5_collate_fn(batch):
+    # Separa gli elementi del batch (immagini, etichette, percorsi, dimensioni)
+    imgs, labels, paths, shapes = zip(*batch)
+
+    batched_labels = [] # Lista per accumulare le etichette indicizzate
+
+    # Itera su ogni campione (immagine + etichette) nel batch
+    # 'i' sara' l'indice dell'immagine nel batch (0, 1, 2, ...)
+    for i, label in enumerate(labels):
+
+        # Processa solo se l'immagine ha almeno un'etichetta
+        if label.shape[0] > 0:
+
+            # Crea un tensore riempito con l'indice (i) dell'immagine
+            # Avra' la stessa n. di righe delle etichette di questa immagine
+            batch_idx = torch.full((label.shape[0], 1), i,
+                                   device=imgs[0].device)
+
+            # Concatena l'indice (colonna 0) alle etichette [classe, x, y, w, h]
+            label_with_batch_idx = torch.cat((batch_idx,
+                                           label.to(imgs[0].device)), 1)
+
+            # Aggiunge il nuovo tensore [i, classe, x, y, w, h] alla lista
+            batched_labels.append(label_with_batch_idx)
+
+    # Se sono state trovate etichette in questo batch...
+    if len(batched_labels) > 0:
+        # ...le unisce tutte in un unico tensore [N_tot_labels, 6]
+        targets = torch.cat(batched_labels, 0)
+    else:
+        # ...altrimenti crea un tensore vuoto (con 6 colonne) per coerenza
+        targets = torch.empty(0, 6, device=imgs[0].device)
+
+    # Restituisce le immagini (stackate in un unico tensore batch)
+    # e il tensore unico delle etichette (targets)
+    return torch.stack(imgs, 0), targets, paths, shapes
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Lettura configurazione .yaml}, label={lst:train_config}]
+# Apre e legge il file di configurazione del dataset (es. harp.yaml)
+with open(opt.data) as f:
+    data_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+# Controlla se la chiave 'is_h5' esiste e ha valore True; altrimenti, imposta False
+is_h5_dataset = data_dict.get('is_h5', False)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Selezione dinamica del DataLoader}, label={lst:train_loader_choice}]
+# Logica condizionale per la selezione dinamica del data loader
+
+# Controlla il flag booleano letto dal file .yaml
+if is_h5_dataset:
+    logger.info("Utilizzo del DataLoader custom per dataset .h5")
+
+    # Crea un'istanza del dataset personalizzato
+    dataset = DatasetH5(path=train_path, img_size=imgsz)
+
+    # Imposta il sampler (necessario per il training distribuito)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset) if rank != -1 else None
+
+    # Crea il DataLoader di PyTorch usando la collate_fn personalizzata
+    dataloader = torch.utils.data.DataLoader(dataset,
+                                            batch_size=batch_size,
+                                            shuffle=sampler is None and not opt.rect,
+                                            num_workers=opt.workers,
+                                            sampler=sampler,
+                                            pin_memory=True,
+                                            collate_fn=h5_collate_fn)
+else:
+    # Logica originale di YOLOv7 per dataset standard
+    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
+                                            hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
+                                            world_size=opt.world_size, workers=opt.workers,
+                                            image_weights=opt.image_weights, quad=opt.quad, prefix=colorstr('train: '))
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Normalizzazione condizionale nel training}, label={lst:train_norm}]
+if is_h5_dataset:
+    # Per i dati H5, i valori sono gia' normalizzati [0,1].
+    imgs = imgs.to(device, non_blocking=True).float()
+else:
+    # Per le immagini normali, mantengo la logica originale.
+    imgs = imgs.to(device, non_blocking=True).float()/255.0
+\end{lstlisting}
+
+\section{Modifiche a test.py}
+\begin{lstlisting}[language=Python, caption={Importazioni in test.py}, label={lst:test_import}]
+# Importa la classe personalizzata per la gestione dei dataset in formato HDF5.
+from utils.dataset_h5 import DatasetH5
+
+# Importa la funzione di default di PyTorch per l'assemblaggio dei batch.
+from torch.utils.data.dataloader import default_collate
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Funzione Collate semplificata per il Test}, label={lst:test_collate}]
+# Funzione custom per raggruppare i dati provenienti da DatasetH5 in un batch.
+def h5_collate_fn(batch):
+# Delega l'assemblaggio del batch alla funzione di default di PyTorch,  che impila automaticamente i campioni in un unico tensore.
+
+    return default_collate(batch)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Nuovo parametro nella funzione test}, label={lst:test_param}]
+def test(data,
+         ...,
+         is_magnetogram=False):
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Creazione Dataloader in test.py}, label={lst:test_loader_choice}]
+# Legge il flag 'is_h5' dal dizionario 'data' (caricato dal file .yaml).
+# Se la chiave non esiste, imposta 'False' come valore di default.
+is_h5_dataset = data.get('is_h5', False)
+
+# Controlla se il dataset e' di tipo H5.
+if is_h5_dataset:
+    # Stampa un messaggio informativo nel log.
+    print("Utilizzo del DataLoader custom per dataset .h5")
+    
+    # Istanzia la classe DatasetH5 personalizzata.
+    # 'data[task]' contiene il percorso alla cartella dei dati (es. 'val').
+    dataset = DatasetH5(path=data[task], img_size=imgsz)
+    
+    # Crea un DataLoader standard di PyTorch utilizzando il dataset H5.
+    dataloader = torch.utils.data.DataLoader(dataset,
+                                             # Imposta la dimensione del batch.
+                                             batch_size=batch_size,
+                                             # Disattiva lo 'shuffle' (mescolamento) per la validazione/test.
+                                             shuffle=False,
+                                             # Imposta il numero di processi paralleli per caricare i dati.
+                                             num_workers=8, 
+                                             # Abilita il 'pinning' della memoria per trasferimenti piu' veloci alla GPU.
+                                             pin_memory=True,
+                                             # Specifica la funzione custom per assemblare i campioni in un batch.
+                                             collate_fn=h5_collate_fn)
+# Se il dataset non e' di tipo H5...
+else:
+    # ...esegue la logica originale di YOLOv7.
+    # Chiama la funzione 'create_dataloader' standard del framework.
+    dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+                                   prefix=colorstr(f'{task}: '))[0]
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Normalizzazione condizionale nel test}, label={lst:test_norm}]
+# Salta la divisione se e' un magnetogramma
+    if not is_magnetogram:
+        img /= 255.0
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Adattamento scale\_coords}, label={lst:test_coords}]
+# ... all'interno del ciclo sulle predizioni ...
+
+# 1. Riscalare le coordinate delle PREDIZIONI
+# La chiamata originale (shapes[si][0]) e' stata modificata in 'shapes[si]'
+scale_coords(img[si].shape[1:], predn[:, :4], shapes[si])  # native-space pred
+
+# ... all'interno del blocco 'if nl:' (se ci sono etichette reali) ...
+
+# 2. Riscalare le coordinate delle ETICHETTE REALI (target)
+# Anche qui, la chiamata e' stata adattata a 'shapes[si]'
+tbox = xywh2xyxy(labels[:, 1:5])
+scale_coords(img[si].shape[1:], tbox, shapes[si])  # native-space labels
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Chiamata al thread di plotting}, label={lst:test_plot_call}]
+# Avvia un thread separato per la funzione 'plot_images' (per non bloccare il loop principale).
+# 'args' passa gli argomenti posizionali (immagine, etichette, percorso, nome file, nomi classi).
+# 'kwargs' (key-word arguments) passa un dizionario:
+#   'is_magnetogram' viene impostato con il valore del flag 'is_magnetogram'.
+# Questo permette a 'plot_images' di sapere che tipo di immagine sta visualizzando.
+Thread(target=plot_images, args=(img, targets, paths, f, names), 
+       kwargs={'is_magnetogram': is_magnetogram}, 
+       daemon=True).start()
+\end{lstlisting}
+
+\section{Modifiche a plots.py}
+\begin{lstlisting}[language=Python, caption={Firma funzione plot\_images}, label={lst:plot_sig}]
+# La firma della funzione originale terminava con 'max_subplots=16'.
+# E' stato aggiunto il nuovo argomento 'is_magnetogram=False' alla fine.
+def plot_images(images, targets, paths=None, fname='images.jpg', names=None, 
+                max_size=640, max_subplots=16, is_magnetogram=False):
+    # Il resto del corpo della funzione...
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Check normalizzazione plot}, label={lst:plot_norm}]
+# ... (codice precedente) ...
+    if isinstance(targets, torch.Tensor):
+        targets = targets.cpu().numpy()
+
+    # La riga originale 'images *= 255' e' stata resa condizionale.
+    # Si esegue solo se NON e' un magnetogramma E se i valori sono normalizzati [0,1].
+    if not is_magnetogram and np.max(images[0]) <= 1:
+        images *= 255
+    
+    tl = 3  # line thickness
+    # ... (codice successivo) ...
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Logica di rendering magnetogrammi}, label={lst:plot_render}]
+# ... (dentro il ciclo for i, img in enumerate(images)) ...
+        
+        # Inizia la logica condizionale basata sul flag
+        if is_magnetogram:
+            # --- Blocco personalizzato per magnetogrammi ---
+            
+            # 1. De-normalizza l'immagine (da [0,1] a [-1500, 1500])
+            #    (img[0] seleziona il singolo canale)
+            magnetogram_data = img[0] * 3000 - 1500
+        
+            # 2. Imposta i limiti di contrasto per la visualizzazione
+            contrast_min = -300
+            contrast_max = 300
+            
+            # 3. Ottiene la colormap 'seismic' (Rosso-Bianco-Blu)
+            cmap = plt.get_cmap('seismic')
+            # 4. Normalizza i dati tra [0,1] in base al contrasto
+            norm = matplotlib.colors.Normalize(vmin=contrast_min, vmax=contrast_max)
+            
+            # 5. Applica la colormap ai dati normalizzati
+            colored_img = cmap(norm(magnetogram_data))
+            # 6. Converte da RGBA [0,1] a RGB [0,255] (formato uint8)
+            img_rgb = (colored_img[:, :, :3] * 255).astype(np.uint8)
+            
+            # 7. Capovolge l'immagine verticalmente (flip Asse X)
+            img = cv2.flip(img_rgb, 0)
+            
+            # 8. Ridimensiona se necessario (come da logica originale)
+            if scale_factor < 1:
+                img = cv2.resize(img, (w, h))
+        else:
+            # --- Blocco Originale per immagini BGR/RGB ---
+            img = img.transpose(1, 2, 0) # Converte da [C, H, W] a [H, W, C]
+            if scale_factor < 1:
+                img = cv2.resize(img, (w, h))
+
+        # Disegna l'immagine (ora in formato RGB) sul mosaico
+        mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
+        # ... (codice successivo)
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Inversione coordinate Y}, label={lst:plot_flip}]
+# ... (codice per il calcolo dei box) ...
+        if boxes.shape[1]:
+            if boxes.max() <= 1.01:
+                boxes[[0, 2]] *= w
+                boxes[[1, 3]] *= h
+            elif scale_factor < 1:
+                boxes *= scale_factor
+            
+        # Aggiunta: Blocco per invertire le coordinate Y se e' un magnetogramma
+        if is_magnetogram:
+            # Inverte le coordinate Y (indice 1 e 3) rispetto all'altezza (h)
+            # Questo compensa il 'cv2.flip(..., 0)' applicato all'immagine
+            boxes[[1, 3]] = h - boxes[[1, 3]]
+
+        # Sposta i box nella loro posizione sul mosaico (logica originale)
+        boxes[[0, 2]] += block_x
+        boxes[[1, 3]] += block_y
+            
+        # ... (codice per disegnare i box) ...
+\end{lstlisting}
+
+\section{Script di Conversione}
+\begin{lstlisting}[language=Python, caption={Script preprocess\_to\_zip.py completo}, label={lst:script_preprocess}]
+import h5py # Libreria per leggere e scrivere file HDF5
+import numpy as np # Libreria per il calcolo numerico
+import cv2 # Libreria OpenCV per l'elaborazione delle immagini
+import os # Libreria per interagire con il sistema operativo
+import glob # Libreria per trovare file sul disco tramite pattern
+from tqdm import tqdm # Libreria per mostrare una barra di progresso
+import argparse # Libreria per gestire gli argomenti passati da riga di comando
+import sys # Libreria per interagire con il sistema
+import zipfile # Libreria per creare e scrivere file .zip
+import concurrent.futures # Libreria per la gestione del multithreading
+
+# --- Impostazioni Globali ---
+IMG_SIZE = 640 # Dimensione fissa (larghezza e altezza) delle immagini di output
+CLIP_MIN, CLIP_MAX = -1500, 1500 # Valori minimi e massimi per il clipping dei dati scientifici
+CLASS_ID = 0 # ID di classe fisso per le etichette (abbiamo solo "regioni attive")
+# Numero di thread "lavoratori" da usare per processare i file H5 in parallelo
+N_WORKERS = 32 
+# ---
+
+def process_file_h5(h5_path):
+    """
+    Processa un singolo file H5.
+    Questa funzione legge i dati, estrae le etichette, processa l'immagine,
+    e restituisce i dati pronti per essere scritti nello zip.
+    E' progettata per essere eseguita in un thread separato.
+    """
+    
+    # Estrae il nome base del file (es. 'M_720s_20101210_000000_TAI_20101210_001159_TAI_01300')
+    base_name = os.path.splitext(os.path.basename(h5_path))[0]
+    # Definisce il percorso dell'immagine DENTRO l'archivio .zip
+    img_arcname = os.path.join('images', f"{base_name}.jpg")
+    # Definisce il percorso del file di etichette DENTRO l'archivio .zip
+    label_arcname = os.path.join('labels', f"{base_name}.txt")
+
+    try:
+        # Apre il file H5 in modalita' lettura ('r')
+        with h5py.File(h5_path, 'r') as f:
+            
+            # --- 1. Estrai Dati Immagine ---
+            # Accede al dataset del magnetogramma
+            magnetogram_data = f['magnetogram/data']
+            # Legge le dimensioni originali (altezza, larghezza)
+            orig_h, orig_w = magnetogram_data.shape
+            # Carica l'intero array dei dati in memoria
+            data = magnetogram_data[:]
+
+            # --- 2. Estrai Etichette (Bounding Box) ---
+            # Accede al gruppo dei metadati
+            harp_group = f['harp/metadata']
+            # Lista per contenere le etichette di QUESTA immagine
+            image_labels = []
+            
+            # Itera su ogni regione attiva (HARP) trovata nei metadati
+            for harp_id in harp_group:
+                # Estrae gli attributi della regione corrente
+                harp_attrs = harp_group[harp_id].attrs
+                
+                # Lista delle chiavi necessarie per definire un box
+                required_keys = ['CRPIX1', 'CRPIX2', 'CRSIZE1', 'CRSIZE2']
+                # Controlla se tutte le chiavi necessarie sono presenti
+                if not all(key in harp_attrs for key in required_keys):
+                    continue # Se ne manca una, salta questa etichetta
+
+                # Converte le dimensioni (in pixel) in float
+                w_abs = float(harp_attrs['CRSIZE1'])
+                h_abs = float(harp_attrs['CRSIZE2'])
+
+                # Validazione: scarta etichette con dimensioni non positive
+                if w_abs <= 0 or h_abs <= 0:
+                    continue # Salta questa etichetta
+
+                # Calcola le coordinate normalizzate in formato YOLO (centro_x, centro_y, w, h)
+                x_center_norm = (float(harp_attrs['CRPIX1']) + w_abs / 2) / orig_w
+                y_center_norm = (float(harp_attrs['CRPIX2']) + h_abs / 2) / orig_h
+                width_norm = w_abs / orig_w
+                height_norm = h_abs / orig_h
+
+                # Validazione: scarta etichette il cui centro e' fuori dall'immagine
+                if not (0.0 < x_center_norm < 1.0 and 0.0 < y_center_norm < 1.0):
+                    continue # Salta questa etichetta
+                
+                # Aggiunge l'etichetta valida alla lista
+                image_labels.append([CLASS_ID, x_center_norm, y_center_norm, width_norm, height_norm])
+
+            # --- 3. Processa Immagine (come in DatasetH5) ---
+            # Pulizia: sostituisce NaN e Infinito con 0.0
+            if np.isnan(data).any() or np.isinf(data).any():
+                data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+            
+            # Clipping: "taglia" i valori all'intervallo definito
+            clipped_data = np.clip(data, CLIP_MIN, CLIP_MAX)
+            # Normalizzazione Min-Max: porta i valori nell'intervallo [0.0, 1.0]
+            normalized_data = (clipped_data - CLIP_MIN) / (CLIP_MAX - CLIP_MIN)
+            # Ridimensionamento: porta l'immagine alla dimensione 640x640
+            resized_image = cv2.resize(normalized_data, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
+            
+            # Conversione 8-bit: "appiattisce" i dati float [0,1] in interi [0,255]
+            image_uint8 = (resized_image * 255.0).astype(np.uint8)
+            # Conversione 3 Canali: duplica il canale unico per creare un'immagine RGB
+            image_rgb = np.stack([image_uint8] * 3, axis=-1)
+            
+            # Codifica in memoria: converte l'array NumPy in un formato JPG (binario)
+            is_success, img_buffer = cv2.imencode('.jpg', image_rgb)
+            if not is_success:
+                # Se la codifica fallisce, solleva un'eccezione
+                raise Exception("Impossibile codificare l'immagine in JPG.")
+            
+            # --- 4. Prepara Etichette (Formato TXT) ---
+            # Crea una lista di stringhe, una per ogni etichetta
+            label_lines = [f"{lbl[0]} {lbl[1]} {lbl[2]} {lbl[3]} {lbl[4]}" for lbl in image_labels]
+            # Unisce le stringhe con un "a capo", pronto per essere scritto su file
+            label_content = "\n".join(label_lines)
+            
+            # Restituisce tutti i dati necessari al thread principale per la scrittura
+            return (img_arcname, img_buffer.tobytes(), label_arcname, label_content)
+
+    except Exception as e:
+        # Gestione degli errori (es. file H5 corrotto)
+        print(f"\nATTENZIONE: Fallimento nel processare {h5_path}: {e}")
+        # Crea un'immagine nera (placeholder)
+        placeholder_img = np.zeros((IMG_SIZE, IMG_SIZE, 3), dtype=np.uint8)
+        # Codifica l'immagine nera
+        is_success, img_buffer = cv2.imencode('.jpg', placeholder_img)
+        # Restituisce l'immagine nera e un file etichette vuoto
+        return (img_arcname, img_buffer.tobytes(), label_arcname, "")
+
+
+def main():
+    """
+    Funzione principale che orchestra il processo.
+    Gestisce gli argomenti da riga di comando, trova i file,
+    avvia il ThreadPool ed esegue la scrittura del file .zip.
+    """
+    
+    # Configura il parser per gli argomenti da riga di comando
+    parser = argparse.ArgumentParser(description="Converte il dataset H5 in un singolo file .zip in formato YOLO (multithread).")
+    parser.add_argument('--source-dir', type=str, required=True, help="Cartella locale contenente i file .h5")
+    parser.add_argument('--zip-file', type=str, required=True, help="Percorso del file .zip di output")
+    parser.add_argument('--workers', type=int, default=N_WORKERS, help="Numero di thread 'produttori'")
+    args = parser.parse_args() # Legge gli argomenti forniti dall'utente
+
+    # Trova tutti i file .h5 nella cartella sorgente (anche sottocartelle)
+    h5_files = sorted(glob.glob(os.path.join(args.source_dir, '**', '*.h5'), recursive=True))
+    if not h5_files:
+        # Se non trova file, stampa un errore ed esce
+        print(f"Errore: Nessun file .h5 trovato in {args.source_dir}")
+        sys.exit(1)
+        
+    print(f"Trovati {len(h5_files)} file .h5. Avvio della conversione in '{args.zip_file}'...")
+    print(f"Uso di {args.workers} thread lavoratori.")
+
+    # Crea e gestisce un pool di thread (max 'args.workers' thread attivi contemporaneamente)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+        
+        # Apre il file .zip in modalita' scrittura ('w') con compressione
+        with zipfile.ZipFile(args.zip_file, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            
+            # Sottomette tutti i lavori (chiama 'process_file_h5' per ogni file)
+            # 'futures' e' una lista di "promesse" di risultati futuri
+            futures = [executor.submit(process_file_h5, h5_path) for h5_path in h5_files]
+            
+            # Il thread principale (questo) ora itera sui risultati man mano che
+            # i thread "lavoratori" li completano (non in ordine di invio)
+            # 'tqdm' crea una barra di progresso per questa iterazione
+            for future in tqdm(concurrent.futures.as_completed(futures), total=len(h5_files), desc="Conversione in corso"):
+                
+                # Ottiene il risultato dal thread completato
+                result = future.result()
+                
+                if result:
+                    # Estrae i dati restituiti dalla funzione
+                    img_arcname, img_buffer, label_arcname, label_content = result
+                    
+                    # Scrive l'immagine (binaria) nel file .zip
+                    zf.writestr(img_arcname, img_buffer)
+                    # Scrive le etichette (testo) nel file .zip
+                    zf.writestr(label_arcname, label_content)
+
+    print("\nConversione completata.")
+    print(f"Il file '{args.zip_file}' e' stato creato con successo.")
+
+# Questo blocco assicura che la funzione 'main()' sia eseguita
+# solo quando lo script e' avviato direttamente (non se importato)
+if __name__ == "__main__":
+    main()
+\end{lstlisting}
+
+\section{Script di Post-Processing}
+\begin{lstlisting}[language=Python, caption={Script convert.py per il mascheramento}, label={lst:script_convert}]
+# Importa la libreria OpenCV per l'elaborazione delle immagini
+import cv2
+# Importa la libreria NumPy per il calcolo numerico e la gestione degli array
+import numpy as np
+# Importa la libreria per interagire con il sistema operativo
+import os
+# Importa la libreria per cercare file sul disco che corrispondono a un pattern
+import glob
+
+# --- Impostazioni ---
+# Definisce il percorso da cui leggere le immagini originali (con sfondo grigio)
+CARTELLA_INPUT = 'Validation/images_original'
+# Definisce il percorso in cui salvare le immagini pulite (con sfondo nero)
+CARTELLA_OUTPUT = 'Validation/images'
+
+# Percentuale del raggio. 1.0 = fino al bordo.
+# 0.96 taglia via i bordi rumorosi/sfumati e lo sfondo.
+FATTORE_RAGGIO = 0.96 
+# --------------------
+
+# Crea la cartella di output se non esiste
+# Controlla se la cartella di output non esiste gia'
+if not os.path.exists(CARTELLA_OUTPUT):
+    # Crea la cartella di output (e tutte le cartelle intermedie necessarie)
+    os.makedirs(CARTELLA_OUTPUT)
+    # Stampa un messaggio di conferma della creazione
+    print(f"Cartella '{CARTELLA_OUTPUT}' creata.")
+
+# Cerca tutti i file immagine (anche nelle sottocartelle)
+# Definisce una tupla di estensioni di file immagine da cercare
+tipi_file = ('*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tif')
+# Inizializza una lista vuota per contenere i percorsi dei file trovati
+file_immagini = []
+# Avvia un ciclo per ogni estensione definita in 'tipi_file'
+for tipo in tipi_file:
+    # Cerca (ricorsivamente, '**') i file che corrispondono al pattern e li aggiunge alla lista
+    file_immagini.extend(glob.glob(os.path.join(CARTELLA_INPUT, '**', tipo), recursive=True))
+
+# Controlla se sono stati trovati file
+# Controlla se la lista 'file_immagini' e' vuota (nessun file trovato)
+if not file_immagini:
+    # Stampa un messaggio di avviso se non sono state trovate immagini
+    print(f"Nessuna immagine trovata nella cartella '{CARTELLA_INPUT}'.")
+    # Stampa un suggerimento per l'utente
+    print("Assicurati di aver creato una cartella 'input' e di averci messo le tue immagini.")
+# Blocco eseguito se almeno un'immagine e' stata trovata
+else:
+    # Stampa il numero di immagini trovate e avvia l'elaborazione
+    print(f"Trovate {len(file_immagini)} immagini. Inizio elaborazione...")
+
+# Elabora ogni immagine
+# Avvia un ciclo che itera su ogni percorso di file trovato
+for percorso_immagine in file_immagini:
+    # Carica l'immagine originale
+    # Legge il file immagine dal disco e lo carica in un array NumPy
+    img_originale = cv2.imread(percorso_immagine)
+    
+    # Controlla se il caricamento dell'immagine e' fallito (es. file corrotto)
+    if img_originale is None:
+        # Stampa un messaggio di errore specificando il file
+        print(f"Errore: Impossibile caricare l'immagine {percorso_immagine}")
+        # Interrompe questa iterazione del ciclo e passa al file successivo
+        continue
+        
+    # Ottieni le dimensioni dell'immagine
+    # Estrae l'altezza ('h') e la larghezza ('w') dalle dimensioni dell'array immagine
+    h, w = img_originale.shape[:2]
+
+    # Calcola il centro e il raggio
+    # Calcola la coordinata X del centro dell'immagine (divisione intera)
+    centro_x = w // 2
+    # Calcola la coordinata Y del centro dell'immagine (divisione intera)
+    centro_y = h // 2
+    
+    # Calcola il raggio basandoti sulla dimensione piu' piccola
+    # Trova il raggio massimo possibile (basato sul lato piu' corto dal centro)
+    raggio_base = min(centro_x, centro_y)
+    # e applica il fattore per escludere i bordi (es. 0.96) e converte in intero
+    raggio = int(raggio_base * FATTORE_RAGGIO)
+
+    # 1. Crea una maschera completamente nera
+    # (della stessa dimensione e tipo dell'originale)
+    # Crea un array NumPy pieno di zeri (nero) con le stesse dimensioni di 'img_originale'
+    maschera = np.zeros_like(img_originale)
+
+    # 2. Disegna un cerchio pieno bianco sulla maschera
+    # Questo cerchio rappresenta l'area che vogliamo conservare
+    # Disegna un cerchio bianco pieno sulla maschera
+    cv2.circle(maschera, (centro_x, centro_y), raggio, (255, 255, 255), thickness=cv2.FILLED)
+
+    # 3. Applica la maschera all'immagine originale
+    # cv2.bitwise_and mantiene solo i pixel dove entrambe
+    # le immagini (originale e maschera) sono non-nere.
+    # Esegue un'operazione AND bit-per-bit. I pixel fuori dal cerchio (dove la maschera e' 0) diventano 0.
+    risultato = cv2.bitwise_and(img_originale, maschera)
+
+    # Costruisci il percorso di output mantenendo la struttura
+    # Calcola il percorso relativo del file (es. 'sottocartella/img.jpg')
+    percorso_relativo = os.path.relpath(percorso_immagine, CARTELLA_INPUT)
+    # Ricostruisce il percorso di destinazione nella cartella di output
+    percorso_output = os.path.join(CARTELLA_OUTPUT, percorso_relativo)
+    
+    # Estrae il percorso della cartella di destinazione (es. 'Validation/images/sottocartella')
+    cartella_destinazione = os.path.dirname(percorso_output)
+    # Controlla se la cartella di destinazione (per le sottocartelle) non esiste
+    if not os.path.exists(cartella_destinazione):
+        # Crea la sottocartella di destinazione se necessario
+        os.makedirs(cartella_destinazione)
+
+    # Salva l'immagine modificata
+    # Salva l'array 'risultato' (l'immagine mascherata) sul disco nel percorso di output
+    cv2.imwrite(percorso_output, risultato)
+    
+# Stampa un messaggio finale al termine di tutti i cicli
+print(f"\nElaborazione completata. Immagini salvate in '{CARTELLA_OUTPUT}'.")
+\end{lstlisting}
