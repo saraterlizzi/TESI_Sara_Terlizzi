@@ -10,6 +10,8 @@
 
 \usepackage{placeins}
 
+\usepackage{longtable} %per separare le tabelle su più pagine
+
 \usepackage{lipsum}
 \usepackage{fancyhdr}
 \usepackage{graphicx}
@@ -200,8 +202,12 @@
     \appendix % Dice a LaTeX che da qui iniziano le lettere A, B, C...
     \input{Chapters/appendice} % Carica il file fisico
     % --- FINE APPENDICE ---
-    \bibliographystyle{apalike}
-    
+    %per bibliografia in ordine alfabetico
+    %\bibliographystyle{apalike}
+    %bibliografia in ordine di apparizione
+    %\bibliographystyle{unsrt}   
+    %bibliografia in stile IEEE
+    \bibliographystyle{ieeetr}
     
     %\bibliographystyle{plainnat} % use this to have URLs listed in References
     %\cleardoublepage

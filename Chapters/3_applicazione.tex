@@ -197,4 +197,34 @@ L'efficacia di questo intervento è immediata: il mascheramento ripristina il co
 \end{figure}
 
 \section{Tracking Multi-Oggetto con Norfair}
-Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale.
+Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale. Le regioni attive solari, infatti, non sono entità statiche, ma evolvono nel tempo, spostandosi e modificando la loro morfologia attraverso la rotazione solare.\\
+Per tracciare tali evoluzioni, è stata integrata -come ampliamente anticipato- la libreria \textbf{Norfair}, una soluzione modulare che implementa un approccio di tipo \textit{tracking-by-detection}. In questo paradigma, il modello neurale (YOLOv7) opera su ogni singolo fotogramma in modo indipendente, mentre il modulo di tracciamento si occupa di associare le rilevazioni tra istanti temporali consecutivi, assegnando un identificativo univoco (ID) a ciascun oggetto e mantenendolo consistente nel tempo.
+
+\subsection{Implementazione del Modulo di Tracciamento}
+Il cuore del sistema è costituito da un processo di elaborazione sequenziale progettato per processare serie temporali di magnetogrammi. Il funzionamento si articola in quattro fasi logiche:
+\begin{enumerate}
+    \item \textbf{Gestione Ibrida dei Dati}\\
+    Il modulo è stato ingegnerizzato per gestire indifferentemente sia dati scientifici (HDF5) che immagini standard. Nel primo caso, viene applicata in tempo reale la medesima procedura di pre-processing utilizzata durante il training (gestione dei valori nulli, clipping fisico e normalizzazione), garandendo la totale congruenza statistica tra i dati appresi dal modello e quelli in ingresso al tracker.
+    \item \textbf{Inferenza e Transcodifica}\\
+    Per ogni frame, la rete neurale genera le bounding box delle regioni attive. Una routine di interfaccia converte i tensori di output originali in oggetti strutturati compatibili con il motore di tracciamento, preservando le coordinate spaziali ed i punteggi di confidenza.
+    \item \textbf{Associazione Temporale}\\
+    Il tracker calcola la distanza tra le rilevazioni correnti e la stima della posizione degli oggetti tracciati nei frame precedenti. Data la natura fisica del problema (le macchie solari si muovono con dinamiche fluide e prevedibili), è stata adottata la metrica \textit{IoU} (Inserction over Union) come criterio di associazione: se la sovrapposizione spaziale tra la predizione attuale e quella passata supera una soglia critica, l'identità dell'oggetto viene preservata.
+    \item \textbf{Sintesi dell'Output}\\
+    Al termine del processo, il sistema aggrega i risultati visuali, generando un video riassuntivo che mostra l'evoluzione dinamica delle regioni attive, con i relativi colori identificativi sovraimpressi per facilitare l'analisi visiva.
+\end{enumerate}
+L'implementazione algoritmica del tracciamento è riportata nel Codice \ref{lst:track_script} in Appendice \ref{app:codice}.
+
+\subsection{Valutazione Quantitativa delle Prestazioni}
+Oltre all'analisi qualitativa visiva, è stato necessario quantificare la robustezza del sistema di tracciamento. A tal fine, è stato sviluppato un modulo di validazione dedicato al calcolo delle metriche standard per il Multi-Object Tracking (MOT), tra cui la \textit{MOTA} (Accuracy) e l'\textit{IDF1} (F1 Score sull'identificazione).\\
+Poiché il calcolo di tali metriche richiede uno standard di annotazione specifico, il modulo implementa una routine di \textbf{standardizzazione automatica} che esegue tre compiti critici:
+\begin{itemize}
+    \item \textbf{Conversione della Ground Truth}: Legge le annotazioni proprietarie e le trasforma nel formato standard internazionale (MOTChallenge), allineando coordinate e identificativi temporali.
+    \item \textbf{Inizializzazione dell'Ambiente di Test}: Configura gli accumulatori statici necessari per registrare le associazioni corrette, le mancate rilevazioni e gli scambi di identità (\textit{ID switches}).
+    \item \textbf{Benchmarking Frame-by-Frame}: Confronta sequenzialmente le traiettorie generate dal tracker con i dati reali, producendo un report analitico dettagliato.
+\end{itemize}
+Questa infrastruttura di test permette do valutare oggettivamente la capacità del modello di mantenere stabile l'identità di una regione attiva anche in presenza di variazioni morfologiche rapide o occlusioni spaziali. \\
+Il codice relativo al calcolo delle metriche è consultabile nel Codice \ref{lst:track_metrics} in Appendice \ref{app:codice}.
+
+\section{Considerazioni Conclusive oppure Riepilogo delle Strategie Implementative oppure Sintesi del Capitolo ed Introduzione alla Sperimentazione}
+In questo capitolo, sono state presentate le strategie implementative adottate per adattare l'architettura YOLOv7 al dominio dell'astrofisica solare. È stato descritto il \textit{duplice approccio metodologico} esplorato: da un lato, l'estensione profonda del framework per la gestione nativa dei dati scientifici, utilizzata come \textit{proof-of-concept} per validare la fattibilità tecnica dell'apprendimento su dati grezzi; dall'altro, lo sviluppo di una catena di pre-elaborazione per la normalizzazione e quantizzazione dei magnetogrammi. Inoltre, sono stati illustrati i moduli accessori sviluppati per garantire la corretta visualizzazione dei risultati fisici e per estendere le capacità del sistema al tracciamento temporale delle regioni attive.\\
+Queste modifiche costituiscono l'infrastruttura tecnica su cui si basa l'intero lavoro di tesi. Nel prossimo capitolo, verranno analizzate le prestazioni quantitative dei modelli, concentrandosi in particolare sulla \textbf{strategia di pre-conversione del dataset}: tale approccio, infatti, si è rivelato il più idoneo per una sperimentazione estensiva, permettendo di valutare la robustezza del sistema tramite le metriche di rilevamento e tracciamento su larga scala.

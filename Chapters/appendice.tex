@@ -3,6 +3,144 @@
 
 In questa appendice sono riportati i codici sorgente completi sviluppati per il progetto.
 
+\section{Generazione del Dataset e Splitting Temporale}
+\label{sec:dataset_split_code}
+\begin{lstlisting}[language=Python, caption={Script dataset.py per il campionamento e la generazione degli split}, label={lst:dataset_generation}]
+import pandas as pd  # Libreria per la manipolazione di dati tabellari (DataFrame).
+import numpy as np  # Libreria per calcoli numerici e gestione array.
+import matplotlib.pyplot as plt  # Libreria per la creazione di grafici.
+from datetime import datetime, timedelta  # Classi per la gestione di date e intervalli di tempo.
+
+# --- CARICAMENTO DATI ---
+# URL del dataset ufficiale SILSO (Sunspot Index and Long-term Solar Observations).
+url = 'https://www.sidc.be/SILSO/DATA/SN_m_tot_V2.0.txt'
+# Definizione dei nomi delle colonne per il file di testo (senza header).
+columns = ['Year', 'Month', 'FracDate', 'Sunspots', 'StdDev', 'Obs', 'DefProv']
+# Legge il file CSV (formato testo separato da spazi) nell'oggetto DataFrame.
+df = pd.read_csv(url, delim_whitespace=True, names=columns)
+# Crea una colonna 'Date' convertendo Anno e Mese in oggetti datetime (giorno impostato a 1).
+df['Date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
+
+# --- FILTRAGGIO TEMPORALE ---
+# Filtra i dati per includere solo il Ciclo Solare 24 (Dic 2008 - Dic 2019).
+cycle24 = df[(df['Date'] >= '2008-12-01') & (df['Date'] <= '2019-12-31')]
+
+# --- CONFIGURAZIONE CAMPIONAMENTO ---
+# Definisce le proporzioni desiderate per ogni sottoinsieme del dataset.
+proportions = {'Train': 0.7, 'Validation': 0.15, 'Test': 0.15}
+
+# Regola la densita' di campionamento per anno in base all'attivita' solare.
+# Assegna peso doppio agli anni di massimo solare (2012-2014) per catturare piu' regioni attive.
+sampling_weights = {year: 2 if 2012 <= year <= 2014 else 1 for year in range(2011, 2020)}
+# Crea una lista di anni ripetuti in base al loro peso (es. 2012 appare 2 volte).
+repeated_years = [year for year in range(2011, 2020) for _ in range(sampling_weights[year])]
+np.random.seed(42)  # Imposta il seme random per la riproducibilita'.
+np.random.shuffle(repeated_years)  # Mescola l'ordine degli anni da campionare.
+
+# --- LOGICA DI SELEZIONE PERIODI ---
+period_length = 90  # Durata in giorni di ogni blocco (Train + Val + Test).
+separation_days = 15  # Giorni di "cuscinetto" tra i set per evitare data leakage (correlazione temporale).
+selected_periods = {'Train': [], 'Validation': [], 'Test': []}  # Dizionario per salvare i risultati.
+used_ranges = []  # Lista per tracciare i periodi gia' occupati ed evitare sovrapposizioni.
+
+# Itera su ogni anno selezionato dalla lista pesata.
+for year in repeated_years:
+    year_start = datetime(year, 1, 1)  # Inizio dell'anno corrente.
+    year_end = datetime(year, 12, 31)  # Fine dell'anno corrente.
+
+    # Calcola l'ultimo giorno utile per iniziare un periodo che stia dentro l'anno.
+    max_start_day = (year_end - year_start).days - period_length
+    if max_start_day <= 0:
+        continue  # Salta l'anno se non c'e' abbastanza spazio.
+
+    attempts = 0  # Contatore tentativi per trovare uno spazio libero.
+    while attempts < 100:
+        # Sceglie un giorno di partenza casuale nell'anno.
+        start_offset = np.random.randint(0, max_start_day)
+        base_start = year_start + timedelta(days=start_offset)
+        
+        # Calcola le date di inizio e fine per il Training set.
+        train_end = base_start + timedelta(days=int(proportions['Train'] * period_length))
+        
+        # Calcola le date per la Validazione (dopo i giorni di separazione).
+        val_start = train_end + timedelta(days=separation_days)
+        val_end = val_start + timedelta(days=int(proportions['Validation'] * period_length))
+        
+        # Calcola le date per il Test (dopo ulteriore separazione).
+        test_start = val_end + timedelta(days=separation_days)
+        test_end = test_start + timedelta(days=int(proportions['Test'] * period_length))
+
+        # --- CONTROLLO SOVRAPPOSIZIONI ---
+        # Verifica se l'intervallo proposto [base_start, test_end] tocca intervalli gia' usati.
+        overlap = any(
+            not (test_end < rng[0] or base_start > rng[1])
+            for rng in used_ranges
+        )
+
+        # Se non c'e' sovrapposizione e finiamo entro l'anno corrente:
+        if not overlap and test_end <= year_end:
+            # Aggiunge le tuple (start, end) alle liste appropriate.
+            # Nota: sottrae 1 giorno alla fine per avere estremi inclusivi precisi.
+            selected_periods['Train'].append((base_start, train_end - timedelta(days=1)))
+            selected_periods['Validation'].append((val_start, val_end - timedelta(days=1)))
+            selected_periods['Test'].append((test_start, test_end - timedelta(days=1)))
+            
+            # Registra l'intero blocco come "usato".
+            used_ranges.append((base_start, test_end))
+            break  # Esce dal ciclo while (successo).
+
+        attempts += 1  # Riprova se c'era sovrapposizione.
+
+# --- ESPORTAZIONE DATI ---
+splits_data = []
+# Riorganizza i dati in un formato tabellare.
+for split, periods in selected_periods.items():
+    for start, end in periods:
+        splits_data.append({'Split': split, 'Start': start, 'End': end})
+
+# Crea un DataFrame e salva il piano di campionamento su CSV.
+splits_df = pd.DataFrame(splits_data)
+splits_df.to_csv('solar_cycle_splits.csv', index=False)
+
+# --- VISUALIZZAZIONE ---
+fig, ax = plt.subplots(figsize=(15, 7))
+# Traccia l'andamento delle macchie solari nel tempo.
+ax.plot(cycle24['Date'], cycle24['Sunspots'], label='Monthly Sunspot Number', color='blue')
+
+# Aggiunge aree colorate per evidenziare i periodi selezionati.
+colors = {'Train': 'green', 'Validation': 'yellow', 'Test': 'red'}
+for split, periods in selected_periods.items():
+    for start, end in periods:
+        # axvspan disegna una banda verticale colorata.
+        ax.axvspan(start, end, color=colors[split], alpha=0.3, label=f'{split} Period' if start == periods[0][0] else "")
+
+# --- STIMA DEL VOLUME DATI ---
+records_count = {}
+for split, periods in selected_periods.items():
+    # Calcola il numero stimato di immagini: giorni * 24h * 5 (1 immagine ogni 12 min).
+    count = sum([(end - start).days * 24 * 5 for start, end in periods])
+    records_count[split] = count
+    print(f'{split} dataset contains {count} images.')
+
+# Mostra i conteggi direttamente sul grafico.
+for idx, (split, count) in enumerate(records_count.items()):
+    ax.text(0.02, 0.9 - idx * 0.05, f'{split} images: {count}', transform=ax.transAxes, fontsize=12, color=colors[split])
+
+# Configurazioni finali del grafico (titoli, label, griglia).
+ax.set_title('Solar Cycle 24 Sunspot Numbers with Randomized Train-Validation-Test Sampling (2011-2019)')
+ax.set_xlabel('Year')
+ax.set_ylabel('Sunspot Number')
+ax.grid(True)
+ax.legend()
+plt.tight_layout()
+# Salva il grafico risultante su file PNG.
+plt.savefig('splits.png', dpi=300)
+
+# Stampa finale di riepilogo in console.
+for idx, (split, count) in enumerate(records_count.items()):
+    print(f'{split} images: {count}')
+\end{lstlisting}
+
 \section{Data Loader Custom}
 \begin{lstlisting}[language=Python, caption={Classe DatasetH5 per il caricamento dei file .h5}, label={lst:dataset_h5_full}]
 # --- BLOCCO IMPORTAZIONI ---
@@ -176,6 +314,194 @@ class DatasetH5(Dataset):
             # Restituisce un'immagine nera per non interrompere il training.
             placeholder_image = torch.zeros((3, self.img_size, self.img_size))
             return placeholder_image, labels_tensor, h5_path, self.shapes[index]
+\end{lstlisting}
+
+\section{Scaricamento e Processamento Dati Solari}
+\label{sec:download_code}
+\begin{lstlisting}[language=Python, caption={Script download.py per il recupero dei dati da JSOC}, label={lst:download_script}]
+import pandas as pd  # Libreria per leggere il file CSV con gli split temporali.
+import os  # Libreria per operazioni sul file system (creazione cartelle, eliminazione file).
+import drms  # Client ufficiale per accedere ai dati solari JSOC/DRMS.
+import h5py  # Libreria per creare e gestire file HDF5 compressi.
+import time  # Libreria per gestire pause e timeout.
+import sunpy.map  # Libreria specifica per leggere e manipolare mappe solari (file FITS).
+from sunpy.net import jsoc  # Modulo di SunPy per interfacciarsi con JSOC.
+import multiprocessing as mp  # Libreria per il calcolo parallelo (gestione processi).
+from datetime import datetime, timedelta  # Classi per la gestione temporale.
+
+# Imposta l'email necessaria per effettuare richieste ai server DRMS.
+EMAIL = 'edoria2011@gmail.com'
+
+# Classe personalizzata che estende h5py.File per una scrittura sicura.
+# Garantisce che non rimangano file corrotti su disco in caso di crash.
+class SafeH5File(h5py.File):
+    def __init__(self, filename, *args, **kwargs):
+        super().__init__(filename, *args, **kwargs)
+        self._store_filename = filename  # Memorizza il percorso del file.
+
+    # Metodo chiamato automaticamente all'uscita dal blocco 'with'.
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()  # Chiude il file.
+        # Se si e' verificata un'eccezione (errore) durante la scrittura...
+        if exc_type:
+            print("An error occurred, cleaning up...")
+            # ...cancella il file parziale/corrotto dal disco.
+            if os.path.exists(self._store_filename):
+                os.remove(self._store_filename)
+        return False
+
+# Funzione per gestire i download falliti con tentativi ripetuti (retry logic).
+def export_with_retries(client, query, sleep_time=3, max_retries=100):
+    retries = 0
+    while retries < max_retries:
+        try:
+            # Tenta di esportare i dati richiedendo un URL FITS.
+            response = client.export(query, method='url', protocol='fits')
+            # Status 4 = Completato, Status 7 = Richiesta in coda.
+            if response.status != 7:
+                return response  # Successo (o errore non recuperabile).
+            elif response.status == 7:
+                # Se il server e' pieno, aspetta e riprova.
+                print(f"[RETRY] Too many pending requests (status={response.status}). Waiting {sleep_time}s...")
+            else:
+                print(f"[RETRY] Unknown status={response.status}. Waiting {sleep_time}s...")
+        except Exception as e:
+            raise  # Se l'errore e' grave, lo lascia gestire al livello superiore.
+
+        time.sleep(sleep_time)  # Attende prima del prossimo tentativo.
+        retries += 1
+
+    # Se supera il numero massimo di tentativi, lancia un errore.
+    raise RuntimeError(f"Exceeded max retries ({max_retries}) for query: {query}")
+
+# Funzione "worker" che processa un intero intervallo di date (es. un blocco di Training).
+def process_range(args):
+    split, start_str, end_str, output_dir = args  # Disimballa gli argomenti.
+
+    print(f"[PID {mp.current_process().pid}] Starting date range {start_str} to {end_str}")
+
+    # Inizializza i client per la connessione al database solare.
+    client = drms.Client(email=EMAIL)
+    jsoc_client = jsoc.JSOCClient()
+
+    # Crea la cartella di output specifica per lo split (es. output/Train).
+    split_path = os.path.join(output_dir, split)
+    os.makedirs(split_path, exist_ok=True)
+
+    # Converte le stringhe delle date in oggetti datetime.
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+
+    current = start
+    # Ciclo principale che avanza di 12 minuti alla volta (cadenza strumento HMI).
+    while current <= end:
+        # Formatta la data nel formato richiesto da JSOC (TAI time).
+        current_str = current.strftime('%Y.%m.%d_%H:%M:%S_TAI')
+        # Definisce il nome del file di output .h5.
+        filename = f'hmi_magnetogram_{current.strftime("%Y-%m-%d_%H-%M-%S")}.h5'
+        output_h5 = os.path.join(split_path, filename)
+
+        # Salta il download se il file esiste gia' (resume capability).
+        if os.path.exists(output_h5):
+            print(f"[{current}] Skipping - file already exists: {output_h5}")
+            current += timedelta(minutes=12)
+            continue
+
+        # --- FASE 1: DOWNLOAD E PREPARAZIONE DATI IN MEMORIA ---
+        try:
+            print(f"[{current}] Requesting HMI magnetogram data...")
+            # Costruisce la query per il magnetogramma (serie hmi.M_720s).
+            # QUALITY<65536 filtra le immagini con errori noti.
+            hmi_query = f'hmi.M_720s[{current_str}][? (QUALITY<65536) ?]'
+            hmi_response = export_with_retries(client, hmi_query)
+
+            print(f"[{current}] Creating SunPy map from FITS URL...")
+            # Scarica il FITS dall'URL e crea una mappa SunPy.
+            hmi_map = sunpy.map.Map(hmi_response.urls['url'][0])
+            data = hmi_map.data  # Estrae la matrice numerica (immagine).
+            metadata = hmi_map.meta  # Estrae l'header FITS (metadati immagine).
+
+            print(f"[{current}] Requesting HARP metadata...")
+            # Cerca i metadati delle regioni attive (HARP) per quello stesso istante.
+            harp_response = jsoc_client.search(
+                jsoc.attrs.Time(current_str, current_str),
+                jsoc.attrs.Series('hmi.Mharp_720s'),
+            )
+
+        except Exception as e:
+            # In caso di errore di rete o dati mancanti, stampa l'errore e salta al prossimo step.
+            print(f"[{current}] Error during data fetch or parsing: {e}")
+            current += timedelta(minutes=12)
+            continue
+
+        # --- FASE 2: SCRITTURA SICURA SU DISCO ---
+        try:
+            # Usa la classe SafeH5File per garantire l'integrita' del file.
+            with SafeH5File(output_h5, 'w') as f:
+                # Salva la matrice del magnetogramma compressa con GZIP (livello 9).
+                f.create_dataset('magnetogram/data', data=data, compression="gzip", compression_opts=9)
+
+                # Crea un gruppo per i metadati del magnetogramma.
+                meta_group = f.create_group('magnetogram/metadata')
+                for key in metadata:
+                    value = metadata.get(key)
+                    try:
+                        # Prova a salvare il valore direttamente.
+                        meta_group.attrs[key] = value
+                    except TypeError:
+                        # Se il tipo non e' supportato da HDF5, lo converte in stringa.
+                        meta_group.attrs[key] = str(value)
+
+                # Crea un gruppo per i metadati HARP (Regioni Attive).
+                harp_group = f.create_group('harp/metadata')
+                for record in harp_response:
+                    harpnum = record["HARPNUM"]
+                    harp_id = f"HARP_{harpnum}"
+                    # Crea un sottogruppo per ogni HARP identificata.
+                    harp_entry = harp_group.create_group(harp_id)
+
+                    # Salva tutte le colonne della risposta HARP come attributi.
+                    for key in harp_response.columns:
+                        value = record[key]
+                        try:
+                            harp_entry.attrs[key] = value
+                        except TypeError:
+                            harp_entry.attrs[key] = str(value)
+
+            print(f"[{current}] File saved: {output_h5}")
+
+        except Exception as e:
+            print(f"[{current}] Error saving file: {e}")
+            # Pulizia extra nel caso SafeH5File non avesse intercettato tutto.
+            if os.path.exists(output_h5):
+                os.remove(output_h5)
+
+        # Avanza l'iteratore temporale di 12 minuti.
+        current += timedelta(minutes=12)
+
+    print(f"[PID {mp.current_process().pid}] Finished processing range {start_str} to {end_str}")
+
+# Funzione principale che orchestra l'esecuzione dei job.
+def run_all(csv_path, output_root="output", num_workers=4):
+    print(f"Reading from: {csv_path}")
+    df = pd.read_csv(csv_path)
+
+    # Crea una lista di tuple (task) da assegnare ai worker.
+    tasks = [(row["Split"], row["Start"], row["End"], output_root) for _, row in df.iterrows()]
+    print(f"Launching {len(tasks)} tasks with {num_workers} worker(s)...")
+
+    # Codice predisposto per il multiprocessing (attualmente esegue in sequenza per debug).
+    # with mp.Pool(processes=num_workers) as pool:
+    #     pool.map(process_range, tasks)
+    
+    # Esegue i task sequenzialmente nel processo corrente.
+    for task in tasks: process_range(task)
+
+    print("All tasks completed.")
+
+if __name__ == '__main__':
+    # Punto di ingresso dello script.
+    run_all('solar_cycle_splits.csv', output_root="/projects/data/physics/data", num_workers=8)
 \end{lstlisting}
 
 \section{Modifiche a train.py}
@@ -753,4 +1079,367 @@ for percorso_immagine in file_immagini:
     
 # Stampa un messaggio finale al termine di tutti i cicli
 print(f"\nElaborazione completata. Immagini salvate in '{CARTELLA_OUTPUT}'.")
+\end{lstlisting}
+
+\section{Script di Tracciamento e Analisi}
+
+\begin{lstlisting}[language=Python, caption={Script di tracciamento (track.py)}, label={lst:track_script}]
+import argparse  # Gestione degli argomenti da riga di comando
+import os  # Interazione con il sistema operativo
+from typing import List  # Per il type hinting
+import subprocess  # Per eseguire comandi esterni (es. FFmpeg)
+import numpy as np  # Calcolo numerico e matriciale
+import torch  # Framework PyTorch per deep learning
+import cv2  # OpenCV per elaborazione immagini
+import h5py  # Lettura file scientifici HDF5
+import glob  # Ricerca file tramite pattern
+from tqdm import tqdm  # Barra di avanzamento
+import norfair  # Libreria di Object Tracking
+from norfair import Detection, Tracker  # Classi principali di Norfair
+from models.experimental import attempt_load  # Caricamento modello YOLOv7
+from utils.general import non_max_suppression  # Algoritmo NMS
+
+# --- FUNZIONI DI UTILITA' ---
+def yolo_detections_to_norfair_detections(yolo_detections: torch.tensor) -> List[Detection]:
+    """Converte le rilevazioni di YOLOv7 in un formato comprensibile da Norfair."""
+    norfair_detections: List[Detection] = []
+    # yolo_detections ha formato [x_min, y_min, x_max, y_max, conf, class]
+    for detection in yolo_detections:
+        # Estrae le coordinate del bounding box
+        bbox = np.array(
+            [
+                [detection[0].item(), detection[1].item()],
+                [detection[2].item(), detection[3].item()],
+            ]
+        )
+        # Estrae i punteggi di confidenza
+        scores = np.array([detection[4].item(), detection[4].item()])
+        # Crea l'oggetto Detection richiesto da Norfair
+        norfair_detections.append(
+            Detection(points=bbox, scores=scores, label=int(detection[5].item()))
+        )
+    return norfair_detections
+
+# --- MAIN ---
+# 1. DEFINIZIONE DEGLI ARGOMENTI
+parser = argparse.ArgumentParser(description="Traccia le regioni attive solari.")
+parser.add_argument("--input-dir", type=str, required=True, help="Percorso file .h5 o .jpg.")
+parser.add_argument("--model-path", type=str, required=True, help="Percorso modello .pt.")
+parser.add_argument("--img-size", type=int, default=640, help="Dimensione inferenza.")
+parser.add_argument("--conf-threshold", type=float, default=0.25, help="Soglia confidenza.")
+parser.add_argument("--output-dir", type=str, default="output_tracking", help="Cartella output.")
+parser.add_argument("--clip-min", type=int, default=-1500, help="Min clipping H5.")
+parser.add_argument("--clip-max", type=int, default=1500, help="Max clipping H5.")
+args = parser.parse_args()  # Parsing degli argomenti
+
+# 2. IMPOSTAZIONI INIZIALI
+os.makedirs(args.output_dir, exist_ok=True)  # Crea cartella output se non esiste
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # Selezione hardware
+
+# 3. CARICAMENTO DEL MODELLO
+print("Caricamento del modello...")
+# Carica i pesi del modello sul device selezionato
+model = attempt_load(args.model_path, map_location=device)
+model.eval()  # Imposta il modello in modalita' valutazione (inferenza)
+
+# 4. INIZIALIZZAZIONE DI NORFAIR
+# Configura il tracker basato sulla sovrapposizione spaziale (IOU)
+tracker = Tracker(
+    distance_function="iou",
+    distance_threshold=0.7,  # Soglia di distanza per associare oggetti
+)
+
+# 5. RICERCA DEI FILE
+# Cerca prima i file scientifici H5
+input_files = sorted(glob.glob(os.path.join(args.input_dir, '*.h5')))
+if not input_files: # Se non trova H5, cerca immagini JPG/JPEG
+    input_files = sorted(glob.glob(os.path.join(args.input_dir, '*.jpg'))) + \
+                  sorted(glob.glob(os.path.join(args.input_dir, '*.jpeg')))
+
+if not input_files:
+    print(f"ERRORE: Nessun file trovato in {args.input_dir}")
+    exit()
+
+# 6. CICLO DI ELABORAZIONE
+for file_path in tqdm(input_files, desc="Tracking"):
+    
+    # --- LOGICA DI CARICAMENTO IBRIDA ---
+    if file_path.endswith('.h5'): # Caso: File Scientifico
+        with h5py.File(file_path, 'r') as f:
+            data = f['magnetogram/data'][:]  # Legge matrice dati
+        # Crea maschera per i valori mancanti (NaN)
+        background_mask = np.isnan(data)
+        # Sostituisce NaN con 0.0 per evitare errori numerici
+        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+        # Applica clipping fisico ai valori del campo magnetico
+        clipped_data = np.clip(data, args.clip_min, args.clip_max)
+        # Normalizza i dati nell'intervallo [0, 1]
+        normalized_data = (clipped_data - args.clip_min) / (args.clip_max - args.clip_min)
+        # Ridimensiona l'immagine per l'inferenza
+        resized_image = cv2.resize(normalized_data, (args.img_size, args.img_size), interpolation=cv2.INTER_LINEAR)
+        
+        # Preparazione visualizzazione (Converte scala di grigi in BGR per OpenCV)
+        display_image_gray = (resized_image * 255).astype(np.uint8)
+        # Ridimensiona la maschera dello sfondo
+        background_mask_resized = cv2.resize(background_mask.astype(np.uint8), (args.img_size, args.img_size), interpolation=cv2.INTER_NEAREST)
+        # Imposta a nero i pixel dello sfondo usando la maschera
+        display_image_gray[background_mask_resized == 1] = 0
+        display_image = cv2.cvtColor(display_image_gray, cv2.COLOR_GRAY2BGR)
+        # Crea il tensore input duplicando i canali (1 -> 3)
+        image_tensor_np = np.stack([resized_image] * 3, axis=-1)
+
+    else: # Caso: Immagine Standard
+        img_raw = cv2.imread(file_path)  # Legge immagine
+        if img_raw is None: continue  # Salta se errore lettura
+        # Ridimensiona immagine
+        display_image = cv2.resize(img_raw, (args.img_size, args.img_size), interpolation=cv2.INTER_LINEAR)
+        # Normalizza pixel tra 0 e 1
+        image_tensor_np = display_image.astype(np.float32) / 255.0
+
+    # Conversione in Tensore PyTorch e spostamento su GPU/CPU
+    # Transpone dimensioni da [H, W, C] a [C, H, W]
+    image_tensor = torch.from_numpy(image_tensor_np.transpose(2, 0, 1)).float().to(device)
+    image_tensor = image_tensor.unsqueeze(0)  # Aggiunge dimensione batch
+
+    # --- Inferenza ---
+    with torch.no_grad():  # Disabilita calcolo gradienti
+        results = model(image_tensor, augment=False)[0]
+    # Applica Non-Maximum Suppression per filtrare box sovrapposti
+    results = non_max_suppression(results, conf_thres=args.conf_threshold)[0]
+    
+    # --- Update Tracker ---
+    if results is not None and len(results) > 0:
+        # Converte rilevazioni YOLO in oggetti Norfair
+        detections = yolo_detections_to_norfair_detections(results)
+        # Aggiorna il tracker con le nuove posizioni
+        tracked_objects = tracker.update(detections=detections)
+    else:
+        # Aggiorna il tracker anche se non ci sono rilevazioni (per gestire oggetti persi)
+        tracked_objects = tracker.update(detections=[])
+
+    # Disegna e Salva
+    # Disegna i box e gli ID tracciati sull'immagine
+    norfair.draw_tracked_boxes(display_image, tracked_objects)
+    # Definisce nome file output (cambia estensione in .jpg se necessario)
+    output_filename = os.path.basename(file_path).replace('.h5', '.jpg')
+    # Salva il frame processato su disco
+    cv2.imwrite(os.path.join(args.output_dir, output_filename), display_image)
+
+# Generazione Video con FFMPEG
+print("\nGenerazione video...")
+# Esegue comando esterno ffmpeg per unire i frame in un video MP4
+subprocess.run([
+    'ffmpeg', '-y', '-r', '10', '-pattern_type', 'glob',
+    '-i', f'{args.output_dir}/*.jpg', 
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    os.path.join(args.output_dir, "tracking_video.mp4")
+])
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Script per il calcolo delle metriche MOT (track\_metrics.py)}, label={lst:track_metrics}]
+import argparse  # Gestione argomenti riga di comando
+import os  # Gestione file system
+import glob  # Ricerca file
+import shutil  # Operazioni su file e cartelle (es. rimozione)
+import numpy as np  # Calcolo numerico
+import torch  # Deep Learning
+import cv2  # OpenCV
+import h5py  # Lettura file H5
+from tqdm import tqdm  # Barra di progresso
+import norfair  # Libreria Tracking
+from norfair import Detection, Tracker  # Classi base
+# Importazioni specifiche per il calcolo delle metriche MOT
+from norfair.metrics import Accumulators, InformationFile 
+from models.experimental import attempt_load  # Loading YOLO
+from utils.general import non_max_suppression  # NMS
+
+# --- 1. UTILITY: Prepara il GT personalizzato per Norfair ---
+def setup_custom_mot_structure(custom_gt_path, img_list, output_base, img_w, img_h):
+    """
+    Legge il file ground_truth proprietario e crea la struttura di cartelle 
+    standard 'MOTChallenge' richiesta dalle metriche di Norfair.
+    """
+    # Crea cartella 'gt' all'interno della directory temporanea
+    gt_dir = os.path.join(output_base, "gt")
+    os.makedirs(gt_dir, exist_ok=True)
+    
+    dest_gt_path = os.path.join(gt_dir, "gt.txt")
+    
+    print(f"Preparazione Ground Truth da: {custom_gt_path}")
+    
+    if not os.path.exists(custom_gt_path):
+        print(f"ERRORE CRITICO: Il file GT {custom_gt_path} non esiste!")
+        exit()
+
+    # Legge il file originale e lo converte riga per riga
+    with open(custom_gt_path, "r") as in_f, open(dest_gt_path, "w") as out_f:
+        for line in in_f:
+            parts = line.strip().split(',')
+            if len(parts) < 6: continue
+            
+            try:
+                # Parsing dei dati: frame, id, x, y, w, h
+                frame = int(parts[0])
+                obj_id = int(parts[1])
+                x = float(parts[2])
+                y = float(parts[3])
+                w = float(parts[4])
+                h = float(parts[5])
+                
+                # Scrive nel formato standard MOT:
+                # frame, id, left, top, width, height, conf(1), -1, -1, -1
+                mot_line = f"{frame},{obj_id},{x:.2f},{y:.2f},{w:.2f},{h:.2f},1,-1,-1,-1\n"
+                out_f.write(mot_line)
+            except ValueError:
+                continue
+
+    # Creazione del file seqinfo.ini (fondamentale per le metriche)
+    seq_len = len(img_list)
+    seqinfo_path = os.path.join(output_base, "seqinfo.ini")
+    with open(seqinfo_path, "w") as f:
+        f.write("[Sequence]\n")
+        f.write(f"name={os.path.basename(output_base)}\n")
+        f.write(f"imDir=img1\n")
+        f.write(f"frameRate=30\n")
+        f.write(f"seqLength={seq_len}\n")
+        f.write(f"imWidth={img_w}\n")
+        f.write(f"imHeight={img_h}\n")
+        f.write(f"imExt=.jpg\n")
+
+# --- 2. CONVERSIONE YOLO -> NORFAIR ---
+def yolo_to_norfair(yolo_preds):
+    """Converte i tensori di output di YOLO in oggetti Detection di Norfair."""
+    norfair_detections = []
+    for det in yolo_preds:
+        # Estrae bbox [x_min, y_min, x_max, y_max]
+        bbox = np.array([
+            [det[0].item(), det[1].item()],
+            [det[2].item(), det[3].item()]
+        ])
+        scores = np.array([det[4].item(), det[4].item()])
+        label = int(det[5].item())
+        norfair_detections.append(Detection(points=bbox, scores=scores, label=label))
+    return norfair_detections
+
+# --- MAIN ---
+if __name__ == "__main__":
+    # Configurazione argomenti
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source", type=str, required=True, help="Cartella immagini")
+    parser.add_argument("--gt-file", type=str, required=True, help="File GT proprietario")
+    parser.add_argument("--model-path", type=str, required=True, help="Modello .pt")
+    parser.add_argument("--img-size", type=int, default=640)
+    parser.add_argument("--conf-thres", type=float, default=0.25)
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 1. Carica Modello (Gestione JIT/Torchscript)
+    print(f"Caricamento modello: {args.model_path}")
+    try:
+        model = attempt_load(args.model_path, map_location=device)
+    except (AttributeError, RuntimeError):
+        # Fallback per modelli esportati in TorchScript
+        print("Rilevato modello JIT/Traced. Uso torch.jit.load...")
+        model = torch.jit.load(args.model_path, map_location=device)
+    model.eval()
+
+    # 2. Lista File
+    input_files = sorted(glob.glob(os.path.join(args.source, '*.*')))
+    # Filtra solo le estensioni supportate
+    input_files = [f for f in input_files if f.endswith(('.jpg', '.jpeg', '.png', '.h5'))]
+    if not input_files:
+        print("ERRORE: Nessun file trovato.")
+        exit()
+
+    # Prepara Cartella temporanea per le metriche
+    TEMP_MOT_DIR = "temp_metrics_env"
+    if os.path.exists(TEMP_MOT_DIR): shutil.rmtree(TEMP_MOT_DIR)
+    os.makedirs(TEMP_MOT_DIR, exist_ok=True)
+
+    # 3. Setup Ambiente Metriche
+    # Converte il GT e crea seqinfo.ini
+    setup_custom_mot_structure(args.gt_file, input_files, TEMP_MOT_DIR, args.img_size, args.img_size)
+
+    # 4. Inizializza Tracker
+    tracker = Tracker(
+        distance_function="iou", 
+        distance_threshold=0.7,
+        detection_threshold=args.conf_thres
+    )
+    
+    # Inizializza oggetti per calcolo metriche
+    print("Inizializzazione Metriche...")
+    seqinfo_path = os.path.join(TEMP_MOT_DIR, "seqinfo.ini")
+    
+    try:
+        # Crea oggetto InformationFile leggendo il file .ini generato
+        info_file = InformationFile(file_path=seqinfo_path)
+        
+        # Crea accumulatore di statistiche
+        acc = Accumulators()
+        acc.create_accumulator(input_path=TEMP_MOT_DIR, information_file=info_file)
+        
+    except Exception as e:
+        print(f"Errore inizializzazione Norfair: {e}")
+        exit()
+
+    print(f"\nAvvio Tracking su {len(input_files)} frames...")
+    
+    # LOOP PRINCIPALE
+    for i, path in enumerate(tqdm(input_files)):
+        # Caricamento e Pre-processing Ibrido
+        if path.endswith('.h5'):
+            with h5py.File(path, 'r') as f: data = np.nan_to_num(f['magnetogram/data'][:])
+            # Normalizzazione scientifica [-1500, 1500] -> [0, 1]
+            norm = (np.clip(data, -1500, 1500) + 1500) / 3000
+            img0 = cv2.resize(norm, (args.img_size, args.img_size))
+            img_tensor = torch.from_numpy(np.stack([img0]*3, axis=-1)).float()
+        else:
+            img0 = cv2.imread(path)
+            if img0 is None: continue
+            img0 = cv2.resize(img0, (args.img_size, args.img_size))
+            img_tensor = torch.from_numpy(img0 / 255.0).float()
+
+        # Preparazione tensore GPU
+        img_tensor = img_tensor.permute(2, 0, 1).unsqueeze(0).to(device)
+
+        # Inferenza
+        with torch.no_grad():
+            try:
+                pred = model(img_tensor, augment=False)[0]
+            except:
+                pred = model(img_tensor)[0] # Fallback JIT
+        
+        # Filtraggio NMS
+        pred = non_max_suppression(pred, args.conf_thres)[0]
+
+        # Aggiornamento Tracker
+        if pred is not None and len(pred) > 0:
+            dets = yolo_to_norfair(pred)
+            tracked_objs = tracker.update(detections=dets)
+        else:
+            tracked_objs = tracker.update(detections=[])
+
+        # Aggiornamento Metriche
+        # Confronta le predizioni del tracker con il GT per questo frame
+        acc.update(predictions=tracked_objs)
+
+    # 5. Calcolo Risultati Finali
+    print("\n" + "="*40)
+    print(" RISULTATI FINALI ")
+    print("="*40)
+    
+    try:
+        # Calcola le metriche (MOTA, IDF1, ecc.)
+        metrics = acc.compute_metrics()
+        print(metrics)
+        
+        # Salva report su file
+        os.makedirs("risultati_finali", exist_ok=True)
+        acc.save_metrics(save_path="risultati_finali", file_name="report_metriche_complete.txt")
+        print("\nReport salvato in: risultati_finali/report_metriche.txt")
+        
+    except Exception as e:
+        print(f"\nERRORE calcolo metriche: {e}")
 \end{lstlisting}
