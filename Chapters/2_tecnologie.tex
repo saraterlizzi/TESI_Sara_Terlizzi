@@ -89,9 +89,9 @@ Nel contesto di questa tesi, esse sono state fondamentali: l'Intelligenza Artifi
 \textbf{Python} è un linguaggio di programmazione ad alto livello, ampiamente utilizzato per la sua semplicità di sintassi, versatilità e la presenza di un ecosistema ricco di librerie.
 Spicca per i suoi punti di forza: adattabilità ad ogni piattaforma, interattività e dinamicità e protipizzazione rapida.\\
 Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio principale per lo sviluppo degli script e l'esecuzione degli elaborazione dati, visione artificiale e deep learning. Si è rivelato essenziale per integrare le diverse componenti del sistema: dalla lettura dei dati scientifici HARP, alla pre-elaborazione delle immagini, fino all'addestramento ed inferenza del modello.
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.4\textwidth]{Figs/Cap2/logo_python.png}
+  \includegraphics[width=0.2\textwidth]{Figs/Cap2/logo_python.png}
   \caption{Logo di Python}
 \end{figure}
 
@@ -106,18 +106,18 @@ Nel contesto di questo progetto di tesi, Python è stato scelto come linguaggio 
 \section{Miniconda}
 \textbf{Miniconda} è una distribuzione minimale di Conda, un sistema di gestione degli ambienti e dei pacchetti Python. È stato utilizzato per creare ambienti isolati e riproducibili, permettendo di configurare ciascuno di essi con una propria versione di Python e delle librerie di terze parti necessarie (come PyTorch, NumPy, OpenCV).\\
 Questa gestione consente di mantenere sotto controllo le dipendenze e garantisce che le specifiche versioni delle librerie siano compatibili fra loro, evitando conflitti che avrebbero potuto compromettere l'addestramento del modello. \cite{miniconda}
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.5\textwidth]{Figs/Cap2/miniconda_logo.jpg}
+  \includegraphics[width=0.3\textwidth]{Figs/Cap2/miniconda_logo.jpg}
   \caption{Logo di Miniconda}
 \end{figure}
 
 \section{PyTorch}
 \textbf{PyTorch }è un framework open-source per il deep learning sviluppato da Meta AI. Esso fornisce un'interfaccia dinamica e intuitiva per la definizione e l'ottimizzazione delle reti neurali, ed è particolarmente apprezzato per il suo supporto nativo all’accelerazione tramite GPU \cite{paszke2019pytorch}.\\
 In questo progetto di tesi, è stato il framework su cui si basa l'intero processo di addestramento ed inferenza del modello, offrendo la flessibilità desiderata e necessaria per apportare le modifiche atte all'adattamento del compito scientifico.
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.3\textwidth]{Figs/Cap2/logo_pytorch.png}
+  \includegraphics[width=0.15\textwidth]{Figs/Cap2/logo_pytorch.png}
   \caption{Logo di Pytorch}
 \end{figure}
 
@@ -125,9 +125,9 @@ In questo progetto di tesi, è stato il framework su cui si basa l'intero proces
 \textbf{CUDA} (\textit{Compute Unified Device Architecture}) è una piattaforma di calcolo parallelo sviluppata da NVIDIA, che consente l’utilizzo delle GPU per compiti generici di calcolo.\\
 Data l'enorme mole di dati e la complessità del modello utilizzato, l'accelerazione hardware è stata indispensabile per ridurre i tempi sia di addestramento che di inferenza, rendendo possibile l'esecuzione di più esperimenti in tempi alquanto ragionevoli.\\
 Nel contesto di questa tesi, la corretta configurazione di CUDA e la sua compatibilità con la versione di PyTorch si sono rivelate essenziali per il garantire il funzionamento ottimale dei modelli su GPU.\cite{cuda}.
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.4\textwidth]{Figs/Cap2/logo_cuda.png}
+  \includegraphics[width=0.3\textwidth]{Figs/Cap2/logo_cuda.png}
   \caption{Logo di CUDA}
 \end{figure}
 
@@ -135,9 +135,9 @@ Nel contesto di questa tesi, la corretta configurazione di CUDA e la sua compati
 \textbf{Norfair} è una libreria open source sviluppata in Python per il \textit{tracking} multi-oggetto in tempo reale \cite{norfair}. Essa è progettata per integrarsi modularmente con qualsiasi sistema di rilevamento che fornisca coordinate spaziali (ad esempio le coordinate \((x, y)\) dei centri delle bounding box). \\
 La libreria si occupa esclusivamente della parte di tracking, ovvero dell'associazione temporale dei rilevamenti (\textit{detections}) frame per frame, mantenendo un identificatore univoco stabile per ogni oggetto monitorato nel video o nel flusso di immagini. Non includendo la componente di rilevamento, essa offre la flessibilità di utilizzare qualsiasi \textit{detector} esterno (come YOLO, Detectron2, MediaPipe).\\
 Nel progetto sviluppato, svolge il ruolo chiave di "inseguire" le regioni attive nel tempo: una volta che YOLOv7 le ha identificate nel singolo magnetogramma, Norfair associa le rilevazioni tra frame consecutivi, dando la possibilità di studiare l'evoluzione di una specifica regione solare. 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.5\textwidth]{Figs/Cap2/logo_norfair.png}
+  \includegraphics[width=0.3\textwidth]{Figs/Cap2/logo_norfair.png}
   \caption{Logo di Norfair}
 \end{figure}
 
