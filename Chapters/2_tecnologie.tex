@@ -301,10 +301,17 @@ Solo profondità & 52.7\% & 69.3M & 187.6G \\
 \end{table}
 
 \section{Dati}
-\subsection{Definizione e significato dei Dati Osservativi}
+\subsection{Definizione e Significato dei Dati Osservativi}
 Il Solar Dynamics Observatory (SDO) è una missione spaziale della NASA, lanciata nel 2010, dedicata allo studio continuo dell'attività solare e dei suoi effetti sulla Terra e sullo spazio circumterrestre \cite{pesnell2012sdo}. Tra gli strumenti scientifici a bordo di SDO, il Helioseismic and Magnetic Imager (HMI) fornisce accurate misure del campo magnetico fotosferico sull'intero disco solare, denominate magnetogrammi, con elevata risoluzione spaziale e temporale \cite{scherrer2012hmi}. I magnetogrammi hanno una dimensione di 4096 × 4096 pixel e costituiscono una base osservativa fondamentale per lo studio delle strutture magnetiche solari e della loro evoluzione, in particolare delle regioni attive.\\
 Le regioni attive solari rappresentano manifestazioni localizzate di intensa attività magnetica sulla fotosfera e sono caratterizzate da forti concentrazioni di flusso magnetico. Esse sono comunemente associate alla presenza di macchie solari e costituiscono le sedi principali di fenomeni energetici quali brillamenti solari ed espulsioni di massa coronale \cite{priest2014mhd}. Nei magnetogrammi, le regioni attive si distinguono chiaramente dal fondo della fotosfera quieta grazie a valori elevati del campo magnetico, con polarità opposte ben definite e spazialmente correlate.\\
-La pipeline di HMI identifica e traccia automaticamente le regioni di attività magnetica, denominate \textbf{HMI Active Region Patches (HARP)}. Ogni HARP è numerata ed è associata a una sequenza temporale di mappe (\textit{bitmaps}) sufficientemente estese da contenere l'intera evoluzione spaziale della regione attiva durante la sua visibilità sul disco solare. Ciascuna HARP corrisponde a una singola regione attiva o a un complesso di regioni attive ed è tracciata in modo coerente nel tempo. I dati HARP forniscono principalmente informazioni di tipo geometrico sulla regione attiva, mantenendo il riferimento alla sua posizione sul disco solare.
+La pipeline di HMI identifica e traccia automaticamente le regioni di attività magnetica, denominate \textbf{HMI Active Region Patches (HARP)}.
+Ogni HARP è numerata ed è associata a una sequenza temporale di mappe (\textit{bitmaps}) sufficientemente estese da contenere l'intera evoluzione spaziale della regione attiva durante la sua visibilità sul disco solare. Ciascuna HARP corrisponde a una singola regione attiva o a un complesso di regioni attive ed è tracciata in modo coerente nel tempo. I dati HARP forniscono principalmente informazioni di tipo geometrico sulla regione attiva, mantenendo il riferimento alla sua posizione sul disco solare. La Figura \ref{fig:hmi_example} mostra un esempio magnetogramma \textit{full-disk}.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.77\textwidth]{Figs/Cap2/HARP.png} 
+  \caption[Esempio di magnetogramma HMI con regioni attive]{Esempio di magnetogramma HMI \textit{full-disk}: le regioni attive (delineate dalle \textit{bounding box}) emergono dal fondo della fotosfera quieta (grigia) sotto forma di concentrazioni bipolari di campo magnetico (bianco e nero).}
+  \label{fig:hmi_example}
+\end{figure}
 
 \subsection{Finalità e utilizzi}
 I magnetogrammi prodotti da HMI permettono di analizzare direttamente la distribuzione e l'intensità del campo magnetico fotosferico, che rappresenta la grandezza fisica fondamentale alla base della formazione e dell'evoluzione delle regioni attive.\\
