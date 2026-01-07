@@ -140,6 +140,7 @@ Per raggiungere questo scopo, la procedura di visualizzazione è stata modificat
 \end{itemize}
 
 \section{Approccio alternativo: Pre-conversione del Dataset}
+\label{sec:approccio_alternativo}
 In alternativa all'adattamento architetturale di YOLOv7 (descritto ampiamente nella sezione~\ref{sec:adattamento_yolo}), è stato esplorato un approccio metodologico che inverte il paradigma di adattamento: \textit{conformare i dati al framework, piuttosto che il framework ai dati}.\\
 Sostanzialmente, si è scelto di trattare il modello preesistente come una \textit{black box}, lasciandone il codice sorgente inalterato. Per conseguire tale obiettivo, è stato implementato un processo di pre-conversione strutturato in due fasi, volto a trasformare l'intero dataset dal formato gerarchico HDF5 al \textbf{formato YOLO}. Quest'ultimo impone una struttura specifica:
 \begin{itemize}
@@ -198,7 +199,7 @@ L'efficacia di questo intervento è immediata: il mascheramento ripristina il co
 
 \section{Tracking Multi-Oggetto con Norfair}
 Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale. Le regioni attive solari, infatti, non sono entità statiche, ma evolvono nel tempo, spostandosi e modificando la loro morfologia attraverso la rotazione solare.\\
-Per tracciare tali evoluzioni, è stata integrata -come ampliamente anticipato- la libreria \textbf{Norfair}, una soluzione modulare che implementa un approccio di tipo \textit{tracking-by-detection}. In questo paradigma, il modello neurale (YOLOv7) opera su ogni singolo fotogramma in modo indipendente, mentre il modulo di tracciamento si occupa di associare le rilevazioni tra istanti temporali consecutivi, assegnando un identificativo univoco (ID) a ciascun oggetto e mantenendolo consistente nel tempo.
+Per tracciare tali evoluzioni, è stata integrata -come ampiamente anticipato- la libreria \textbf{Norfair}, una soluzione modulare che implementa un approccio di tipo \textit{tracking-by-detection}. In questo paradigma, il modello neurale (YOLOv7) opera su ogni singolo fotogramma in modo indipendente, mentre il modulo di tracciamento si occupa di associare le rilevazioni tra istanti temporali consecutivi, assegnando un identificativo univoco (ID) a ciascun oggetto e mantenendolo consistente nel tempo.
 
 \subsection{Implementazione del Modulo di Tracciamento}
 Il cuore del sistema è costituito da un processo di elaborazione sequenziale progettato per processare serie temporali di magnetogrammi. Il funzionamento si articola in quattro fasi logiche:

@@ -1,0 +1,246 @@
+\chapter{Sperimentazione e Analisi dei Risultati}
+\label{cap:4}
+\section{Preparazione del Dataset}
+La fase sperimentale del presente lavoro di tesi si è basata sul dataset SDO/HMI relativo al Ciclo Solare 24. Una delle sfide principali è stata la gestione dell'enorme mole di dati scientifici grezzi e la loro predisposizione in un formato compatibile con le risorse computazionali a disposizione.
+
+\subsection{Analisi Dimensionale del Dataset Originale}
+Il dataset di partenza, costituito da magnetogrammi scientifici in formato HDF5 (\texttt{.h5}), presentava dimensioni proibitive per un addestramento diretto in assenza di infrastrutture di calcolo ad alte prestazioni. Infatti, la ripartizione originale dei dati prevedeva:
+\begin{itemize}
+    \item \textbf{Training Set}: 1,8 TB (corrispondenti a 81.436 magnetogrammi);
+    \item \textbf{Validation Set}: 351 GB (corrispondenti a 16.012 magnetogrammi);
+    \item \textbf{Test Set}: 356 GB (corrispondenti a 16.155 magnetogrammi);
+\end{itemize}
+Complessivamente, il volume dei dati ammontava a 2,5 TB, per un totale di 113.603 file. L'analisi preliminare ha evidenziato un peso medio per singolo magnetogramma di circa 22,07 MB, dovuto alla natura del file che conserva valori fisici del campo magnetico in virgola mobile ad alta precisione, oltre a numerosi metadati strumentali.
+
+\subsection{Dataset Sperimentale}
+In linea con la metodologia operativa definita nel Capitolo \ref{cap:3} (Sezione \ref{sec:approccio_alternativo}), per l'esecuzione degli esperimenti non sono stati utilizzati i dati grezzi, bensì la loro versione convertita e ottimizzata per il framework YOLOv7 originale, senza alcuna modifica.\\
+L'applicazione della pipeline di pre-elaborazione all'intero archivio ha prodotto un dataset di dimensione totale di 4,75 GB (con un rapporto di compressione 500:1), che ha reso possibile l'esecuzione dei test su hardware a singola GPU, abbattendo i tempi di I/O dati dalla navigazione della struttura interna del file scientifico.
+
+\section{Configurazione degli Esperimenti}
+\label{sec:configurazione_esperimenti}
+Per valutare le prestazioni del modello YOLOv7 e l'impatto della quantità di dati su di esse, la sperimentazione è stata suddivisa in due configurazioni distinte, entrambe basate sul dataset convertito:
+\begin{itemize}
+    \item \textbf{Subset Ridotto - 1 GB}: Addestramento pilota su una porzione ridotta del dataset, al fine di validare rapidamente la convergenza degli iperparametri e la correttezza della pipeline.
+    \item \textbf{Dataset Completo - 4,75 GB}: Addestramento definitivo sul dataset intero preparato dalla dottoranda Elizabeth Doria Rosales, volto a massimizzare la capacità di generalizzazione del modello.
+\end{itemize}
+Per entrambe le configurazioni, in seguito alla fase di training, sono stati generati due \textit{checkpoint} del modello:
+\begin{itemize}
+    \item \textbf{Best}: pesi che hanno ottenuto le migliori metriche sul validation set durante il training.
+    \item \textbf{Last}: pesi al termine dell'ultima epoca di addestramento.
+\end{itemize}
+
+\section{Risultati del Rilevamento con YOLOv7}
+In questa sezione, vengono riportate le metriche quantitative ottenute, per entrambe le configurazioni esplorate nella Sezione \ref{sec:configurazione_esperimenti}. 
+
+\subsection{Risultati del Subset}
+L'addestramento sul Subset ridotto ha rappresentato la \textbf{prima fase sperimentale}, fondamentale per comprendere il comportamento della rete in condizione di scarsità di dati. I risultati ottenuti sono quelli emblematici delle sfide legate all'addestramento delle \textit{Deep Neural Network}: il modello ha mostrato un'ottima capacità iniziale di apprendimento, seguita però da un rapido e marcato degrado delle prestazioni dovuto al fenomeno dell'\textit{overfitting}.
+
+\subsubsection{Training}
+L'analisi dell'andamento dell'addestramento è visibile nei grafici complessivi generati durante le epoche. Come si osserva nella Figura \ref{fig:results_1gb} riportata di seguito, il modello raggiunge il suo picco prestazionale attorno all'epoca 50. In questa fase, le metriche di validazione (in particolare mAP e Recall) trovano i valori massimi, indicando che la rete sta imparando correttamente le caratteristiche morfologiche delle regioni attive.\\
+Tuttavia, proseguendo l'addestramento oltre questo punto, si nota una \textbf{divergenza critica}: mentre il modello continua a minimizzare la \textit{loss} sui dati di training (segno che sta memorizzando gli esempi), le prestazioni sui dati di validazione iniziano a scendere costantemente invece di stabilizzarsi. Questo è il segnale inequivocabile che il dataset da 1 GB non possiede una varianza sufficiente per sostenere un addestramento lungo senza incorrere in overfitting.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap4/results_1gb.png} 
+    \caption[Curve di addestramento e validazione (Subset 1 GB)]{Curve di addestramento e validazione per il subset da 1 GB. È evidente il picco di prestazioni (mAP@0.5 $\approx$ 0.6) attorno all'epoca 50, seguito da un lento ma inesorabile degrado delle metriche di validazione.}
+    \label{fig:results_1gb}
+\end{figure}
+
+\subsubsection{Test (Checkpoint Best)}
+Il \textbf{\textit{checkpoint} Best} rappresenta lo stato del modello salvato dal sistema in presenza della massima performance sul validation set (corrispondente al picco discusso sopra). In questa fase "ideale", nonostante la limitata quantità di dati, il modello era riuscito a generalizzare correttamente.\\
+I test effettuati su questo checkpoint hanno prodotto risultati molto incoraggianti, con una mAP@0.5 di 0.604, Precision e Recall che dimostrano che il modello possiede un buon bilanciamento, riuscendo ad identificare la maggior parte delle strutture rilevanti con una buona confidenza. Il tutto è mostrato in Figura \ref{fig:pr_best_1gb}.\\
+Questo risultato dimostra che l'architettura di YOLOv7 è idonea al compito scientifico, ma necessita di essere fermata al momento giusto (\textit{Early Stopping}) se i dati sono pochi.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{Figs/Cap4/pr_curve_best_1gb.png}
+    \caption[Curva Precision-Recall (Checkpoint Best, Subset 1 GB)]{Curva Precision-Recall relativa ai pesi migliori (Checkpoint Best). L'area sottesa alla curva (mAP@0.5) raggiunge il valore di 0.604, indicando una buona capacità di rilevamento prima dell'insorgere dell'overfitting.}
+    \label{fig:pr_best_1gb}
+\end{figure}
+
+\subsubsection{Test (Checkpoint Last)}
+Il \textbf{\textit{checkpoint} Last} corrisponde al modello finale, salvato al termine di tutte le epoche di addestramento previste. Qui, le conseguenze dell'overfitting diventano misurabili e severe. A causa dell'eccessiva specializzazione sul training set, il modello ha perso la capacità di riconoscere le regioni attive mai viste prima.\\
+Il crollo delle prestazioni, come mostrato in Figura \ref{fig:pr_last_1gb}, è drastico rispetto alla configurazione Best: mAP@0.5 scende a 0.224 (rispetto a 0.605 del Best).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{Figs/Cap4/pr_curve_last_1gb.png}
+    \caption[Curva Precision-Recall (Checkpoint Last, Subset 1 GB)]{Curva Precision-Recall del modello finale (Checkpoint Last) del Subset Ridotto. Il valore di mAP@0.5 crolla a 0.224, confermando che il prolungamento dell'addestramento su un dataset ridotto ha danneggiato le capacità di generalizzazione della rete.}
+    \label{fig:pr_last_1gb}
+\end{figure}
+Dal punto di vista visivo, questo degrado si traduce in una "cecità" verso le regioni più piccole.\\
+Come mostrato nel confronto seguente (Figura \ref{fig:visual_compare_1gb}), mentre il \textit{Ground Truth} evidenzia numerose regioni attive di varia intensità, il modello finale è diventato estremamente conservativo: ignora la quasi totalità delle regioni attive (\textbf{Falsi Negativi}), rilevando sporadicamente solo quelle più estese ed evidenti.
+% --- PRIMA PARTE (Pagina 1) ---
+\begin{figure}[H]
+    \centering
+    % Immagine A
+    \includegraphics[width=1\textwidth]{Figs/Cap4/visual_labels_1gb.jpg}
+    \vspace{0.1cm}
+    {\footnotesize \textbf{(a) Ground Truth}}
+    % Didascalia della prima parte 
+    \caption[Confronto qualitativo (1 GB)]{Prima parte del Confronto Qualitativo.}
+    \label{fig:visual_compare_1gb}
+\end{figure}
+\clearpage % FORZA IL SALTO PAGINA 
+% --- SECONDA PARTE (Pagina 2) ---
+\begin{figure}[H]
+    \ContinuedFloat % Mantiene lo stesso numero di figura
+    \centering
+    % Immagine B
+    \includegraphics[width=1\textwidth]{Figs/Cap4/visual_pred_1gb.jpg}
+    \vspace{0.1cm}
+    {\footnotesize \textbf{(b) Predizione Modello Last}}
+    % Didascalia completa
+    \caption[]{Seconda parte del Confronto Qualitativo. In alto (a) nella pagina precedente le annotazioni reali, qui sopra (b) le predizioni. Si nota l'elevato numero di Falsi Negativi.}
+\end{figure}
+
+\subsection{Risultati del Dataset Completo}
+L'addestramento sul dataset completo ha confermato l'ipotesi principale: l'aumento della varietà e quantità dei dati ha agito come fattore di regolarizzazione naturale, mitigando notevolmente il fenomeno dell'overfitting riscontrato nell'esperimento precedente.
+
+\subsubsection{Training}
+Il grafico dell'andamento dell'addestramento mostra un comportamento radicalmente diverso rispetto al caso del subset ridotto. Come visibile nella Figura \ref{fig:results_full}, le curve di validazione non presentano più la caratteristica forma a "picco e crollo". Al contrario, si osserva una \textbf{crescita progressiva delle metriche} (mAP, Precision, Recall) che tende a stabilizzarsi nella seconda metà della fase di training. Questo indica che il modello non sta più memorizzando i singoli esempi, ma sta apprendendo caratteristiche generalizzabili che rimangono valide anche sui dati di validazione. 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap4/results_full.png} 
+    \caption[Curve di addestramento e validazione (Dataset Completo)]{Curve di addestramento sul Dataset Completo. A differenza del caso precedente, si nota una notevole stabilità: le metriche di validazione crescono e si mantengono costanti senza degradare, dimostrando che il modello ha raggiunto una convergenza robusta.}
+    \label{fig:results_full}
+\end{figure}
+
+\subsubsection{Test (Checkpoint Best)}
+Il \textbf{\textit{checkpoint} Best}, relativo al dataset completo, ha fatto registrare prestazioni eccellenti, raggiungendo un valore di mAP@0.5 pari a 0.597. Questo risultato è particolarmente significativo se confrontato con l'esperimento precedente: sebbene il valore numerico assoluto sia simile a quello del subset (0.604), la solidità statistica è ben diversa. Ottenere tale precisione su un dataset più vasto e variegato conferma che la rete neurale, quando alimentata con una quantità adeguata di informazioni, riesce ampiamente a generalizzare le caratteristiche morfologiche delle regioni attive senza ricorrere alla memorizzazione. La curva Precision-Recall, mostrata nella Figura \ref{fig:pr_best_full}, evidenzia un'area sottesa molto ampia, indice di un classificatore robusto.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{Figs/Cap4/pr_curve_best_full.png}
+    \caption[Curva Precision-Recall (Checkpoint Best, Dataset Completo)]{Curva Precision-Recall relativa ai pesi migliori (Checkpoint Best) del Dataset Completo. Il mAP raggiunge il valore di 0.597, confermando l'alta capacità di apprendimento del modello in presenza di un dataset adeguatamente dimensionato.}
+    \label{fig:pr_best_full}
+\end{figure}
+
+\subsubsection{Test (Checkpoint Last)}
+L'analisi del \textbf{\textit{checkpoint} Last}, salvato al termine del ciclo di addestramento, offre la conferma definitiva della bontà dell'approccio basato sul dataset completo. Da quanto si evince nella Figura \ref{fig:pr_last_full}, il modello finale ha raggiunto una mAP@0.5 di 0.385. Sebbene si registri una flessione fisiologica tra il picco assoluto e lo stato finale, il modello mantiene una capacità predittiva solida. Questo dimostra che l'aumento dei dati ha agito efficacemente, prevenendo il crollo delle prestazioni (\textit{catastrophic forgetting}) che si era verificato nel primo esperimento.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{Figs/Cap4/pr_curve_last_full.png}
+    \caption[Curva Precision-Recall (Checkpoint Last, Dataset Completo)]{Curva Precision-Recall del modello finale (Checkpoint Last) del Dataset Completo. Il valore di mAP@0.5 si assesta a 0.385, dimostrando una tenuta delle prestazioni decisamente superiore rispetto al crollo osservato nel dataset ridotto.}
+    \label{fig:pr_last_full}
+\end{figure}
+Anche l'analisi qualitativa conferma questi dati numerici. Come visibile nel confronto seguente (Figura \ref{fig:visual_compare_full}), le predizioni del modello riescono a localizzare correttamente la maggior parte delle regioni attive, mantenendo una buona copertura spaziale anche alla fine dell'addestramento e riducendo drasticamente i Falsi Negativi rispetto al modello addestrato su pochi dati.
+% --- PRIMA PARTE (Pagina 1) ---
+\begin{figure}[H]
+    \centering
+    % Immagine A
+    \includegraphics[width=1\textwidth]{Figs/Cap4/visual_labels_last_full.jpg}
+    \vspace{0.1cm}
+    {\footnotesize \textbf{(a) Ground Truth}}
+    % Didascalia della prima parte 
+    \caption[Confronto qualitativo (Dataset Completo)]{Prima parte del Confronto Qualitativo.}
+    \label{fig:visual_compare_full}
+\end{figure}
+\clearpage % FORZA IL SALTO PAGINA 
+% --- SECONDA PARTE (Pagina 2) ---
+\begin{figure}[H]
+    \ContinuedFloat % Mantiene lo stesso numero di figura
+    \centering
+    % Immagine B
+    \includegraphics[width=1\textwidth]{Figs/Cap4/visual_pred_last_full.jpg}
+    \vspace{0.1cm}
+    {\footnotesize \textbf{(b) Predizione Modello Last}}
+    % Didascalia completa
+    \caption[]{Seconda parte del Confronto Qualitativo. In alto (a) le annotazioni reali (Ground Truth), in basso (b) le predizioni. Il modello dimostra di aver appreso le caratteristiche morfologiche, rilevando le regioni attive principali senza i numerosi errori di omissione riscontrati nell'esperimento da 1 GB.}
+\end{figure}
+
+\subsection{Confronto e Discussione}
+\label{sec:confronto_discussione}
+L'analisi congiunta dei due esperimenti condotti permette di trarre conclusioni significative riguardo l'applicabilità delle reti neurali convoluzionali profonde (come YOLOv7) nell'ambito della \textit{Space Weather}. Il confronto tra l'addestramento sul Subset Ridotto e quello sul Dataset Completo evidenzia come la quantità dei dati non influenzi solo la performance finale, ma la stabilità stessa del processo di apprendimento.
+
+\subsubsection{Confronto delle Metriche}
+La tabella \ref{tab:confronto_metriche} riassume le prestazioni registrate nelle due configurazioni.
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\hline
+Configurazione & Best (mAP) & Last (mAP) & Delta ($\Delta$) \\
+\hline
+Subset (1 GB) & 0.604 & 0.224 & -63\% \\
+\textbf{Dataset Completo (4.75 GB)} & 0.597 & \textbf{0.385} & \textbf{-35\%} \\
+\hline
+\end{tabular}
+\caption[Confronto metriche prestazionali]{Confronto sintetico delle prestazioni tra le due configurazioni sperimentali. Si evidenzia come il dataset completo riduca drasticamente il calo di prestazioni.}
+\label{tab:confronto_metriche}
+\end{table}
+Dai dati emerge un \textbf{paradosso apparente}: il modello addestrato su pochi dati ha raggiunto un picco numerico leggermente superiore (0.604 contro 0.597), ma si tratta di un risultato ingannevole. Nel caso del subset ridotto, il picco è stato raggiunto grazie alla memorizzazione delle caratteristiche specifiche del training set, incapace però di sostenere la generalizzazione nel lungo termine. Al contrario, il dataset completo ha prodotto un modello estremamente più robusto: il divario contenuto tra il Best e il Last indica che la rete ha efficacemente appreso le \textit{feature} morfologiche delle regioni attive, mantenendo la capacità di riconoscerle anche al termine di un lungo addestramento.
+
+\subsubsection{Stabilità e Generalizzazione}
+La \textbf{differenza più critica} risiede nel comportamento visivo e nella tenuta del modello. Il test sul subset da 1 GB ha mostrato i sintomi classici di un apprendimento instabile: man mano che l'addestramento procedeva oltre il punto di ottimo, la rete dimenticava come riconoscere le strutture più piccole e meno evidenti, focalizzandosi solo su pochi esempi macroscopici. Il test sul dataset completo, invece, ha mantenuto una sensibilità elevata (Recall) durante tutto il processo. L'aumento della varietà dei dati ha agito come una forma di regolarizzazione implicita, impedendo ai pesi della rete di specializzarsi eccessivamente e garantendo una copertura uniforme sia sulle grandi regioni attive che sulle più piccole.\\
+In conclusione, la sperimentazione dimostra che l'architettura YOLOv7 è \textbf{idonea al rilevamento delle regioni attive} sui magnetogrammi SDO/HMI, a patto che venga alimentata con una mole di dati pre-convertiti sufficiente a rappresentare la varianza statistica del fenomeno solare.
+
+\section{Validazione del Tracking Multi-Oggetto}
+Conclusa l'analisi delle prestazioni della detection statica, l'ultima fase sperimentale si concentra sulla validazione della consistenza temporale delle predizioni. Per questa analisi, la pipeline di tracciamento è stata applicata utilizzando i checkpoint risultanti da YOLOv7 addestrato sul \textbf{dataset completo (4,75 GB)} (poiché rivelatosi quello con risultati migliori). L'obiettivo specifico è quantificare la capacità del sistema di mantenere stabile l'identità delle regioni attive attraverso frame successivi, confrontando direttamente le prestazioni ottenute con la configurazione del checkpoint Best rispetto a quelle ottenute con il checkpoint Last.
+
+\subsection{Metodologia di Valutazione}
+Per quantificare oggettivamente le qualità del tracciamento, le metriche prese in considerazione sono state quelle standard per il \textit{Multi-Object Tracking} (MOT):
+\begin{itemize}
+    \item \textbf{MOTA (Multiple Object Tracking Accuracy)}: metrica globale che combina falsi positivi, falsi negativi e scambi di identità (\textit{ID Switches}); rappresenta, quindi, l'accuratezza complessiva del sistema.
+    \item \textbf{IDF1 (Identification F1 Score)}: misura la capacità del sistema di attribuire e mantenere lo stesso ID corretto ad un oggetto per tutta la durata; rappresenta, quindi, il parametro più critico per la coerenza temporale.
+    \item \textbf{ID Switches}: misura il numero totale di volte in cui il sistema commette un errore cambiando l'ID ad un oggetto che è rimasto lo stesso.
+\end{itemize}
+
+\section{Risultati del Tracking}
+In questa sezione, sono presentati i risultati quantitativi e qualitativi, evidenziando come la qualità del modello di rilevamento influenzi direttamente la stabilità del tracciamento.
+
+\subsection{Analisi Quantitativa}
+La Tabella \ref{tab:tracking_metrics} riassume le prestazioni misurate sui dati di test per le due configurazioni dei checkpoint.
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\hline
+\textbf{Configurazione} & \textbf{MOTA} ($\uparrow$) & \textbf{IDF1} ($\uparrow$) & \textbf{ID Switches} ($\downarrow$) \\
+\hline
+\textbf{Best} & \textbf{40.8\%} & \textbf{66.5\%} & 628 \\
+Last & 24.0\% & 47.6\% & \textbf{384} \\
+\hline
+\end{tabular}
+\vspace{0.2cm}
+\caption[Metriche di Tracciamento (Dataset Completo)]{Confronto delle prestazioni di tracciamento. I pesi Best garantiscono un'accuratezza globale (MOTA) e una stabilità di identità (IDF1) nettamente superiori.}
+\label{tab:tracking_metrics}
+\end{table}
+
+\subsubsection{Discussione dei Risultati}
+Dal confronto emerge la \textbf{netta superiorità della configurazione Best}. Il valore di IDF1 (66.5\%) conferma che il sistema, nel suo punto di ottimo, riesce a mantenere l'identità corretta delle regioni attive per la maggior parte della loro durata, un requisito fondamentale per le analisi scientifiche. Il calo del MOTA nella configurazione Last (dal 40.8\% al 24.0\%) è coerente con la diminuzione delle capacità di rilevamento discussa nella Sezione \ref{sec:confronto_discussione} (mAP inferiore).\\
+Un'\textbf{osservazione particolare} merita il dato degli ID Switches, che appare inferiore nel modello Last (384 contro 628). Tale risultato, tuttavia, non deve essere interpretato come una maggiore stabilità, bensì come un artefatto dovuto al basso valore di Recall (circa 30\%). Il modello finale, omettendo il rilevamento di numerose regioni attive (generando quindi falsi negativi), riduce statisticamente le occasioni in cui l'algoritmo può commettere un errore di scambio, risultando in un numero assoluto di switch ingannevolmente basso.
+
+\subsection{Analisi Qualitativa}
+Per valutare il comportamento del sistema in scenari reali di diversa complessità, l'analisi visiva è stata suddivisa in \textbf{tre casistiche rappresentative}.
+
+\subsubsection{Primo Scenario: Alta Densità di Regioni }
+L'analisi dello scenario ad alta attività evidenzia in modo netto l'importanza della strategia di selezione del modello (\textit{checkpointing}) basata sulla validation loss. Di fronte ad un disco solare densamente popolato da regioni attive eterogenee (risalente al 16 maggio 2012), le due configurazioni offrono \textbf{prestazioni drasticamente diverse}.\\
+Come mostrato nella Figura \ref{fig:scenario1_best}, il modello con i pesi migliori dimostra un'\textbf{elevata sensibilità} (Recall). La rete riesce a tracciare la quasi totalità delle regioni attive presenti, sovrapponendo correttamente i propri bounding box (blu) alle annotazioni di Ground Truth (rosso) su tutto il disco. Il sistema gestisce efficacemente la complessità della scena, rilevando con precisione sia le vaste strutture centrali sia le regioni minori situate in prossimità del bordo.\\
+Al contrario, la Figura \ref{fig:scenario1_last} illustra il comportamento del modello all'ultima epoca di addestramento sullo stesso frame temporale. In questa configurazione si osserva un \textbf{degrado delle prestazioni}: il modello traccia solamente un numero esiguo di regioni (circa 4 su oltre una decina presenti), ignorando completamente la maggior parte delle regioni attive. Questo elevato tasso di \textit{missed detections} suggerisce che, nelle fasi finali del training, la rete abbia subito un'instabilità o una perdita di capacità di generalizzazione (\textit{catastrophic forgetting}). \\
+Il confronto visivo tra le due Figure (\ref{fig:scenario1_best} e \ref{fig:scenario1_last}) convalida la scelta operativa di utilizzare il \textbf{\textit{checkpoint} Best}, l'unico in grado di garantire una copertura del segnale adeguata per il tracking delle regioni attive solari.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{Figs/Cap4/best_scenario1.jpg}
+    \caption[Scenario 1 (Modello Best)]{Visualizzazione delle prestazioni in uno scenario ad alta densità di regioni attive con il Checkpoint Best. I bounding box blu (predizioni con ID Norfair) si sovrappongono efficacemente alla quasi totalità dei box rossi (Ground Truth con ID HARP).}
+    \label{fig:scenario1_best}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{Figs/Cap4/last_scenario1.jpg}
+    \caption[Scenario 1 (Modello Last)]{Visualizzazione dello stesso frame temporale elaborato con il Checkpoint Last. Si osserva un drastico calo delle performance: il modello ignora la maggior parte delle regioni attive presenti (box rossi privi di corrispettivo blu).}
+    \label{fig:scenario1_last}
+\end{figure}
+
+\subsubsection{Secondo Scenario: Bassa Densità di Regioni Attive}
+Il secondo scenario di test valuta le prestazioni in condizioni di attività solare ridotta, selezionando un magnetogramma (risalente al 6 giugno 2019) caratterizzato da un disco solare prevalentemente quieto, con la presenza di sole tre regioni attive di dimensioni modeste e ben distanziate.\\
+La Figura \ref{fig:scenario2_best} mostra i risultati ottenuti con il checkpoint best. La rete conferma la sua \textbf{eccellente affidabilità}, tracciando correttamente tutte e tre le regioni attive presenti. I bounding box si sovrappongono con precisione alle annotazioni di Ground Truth, dimostrando che il modello è in grado di risolvere anche segnali di intensità minori o dimensioni ridotte, senza generare falsi positivi nelle aree vuote.\\
+Al contrario, la Figura \ref{fig:scenario2_last} evidenzia il comportamento del modello last. Anche in questo contesto semplificato, privo di affollamento, si osserva un \textbf{fallimento} nel rilevare due delle tre regioni presenti, limitandosi a tracciare solo la struttura più evidente. Le altre due regioni sono completamente ignorate, generando falsi negativi. Questo risultato è determinante: attesta che il checkpoint finale soffre di una \textbf{generalizzata perdita di sensibilità} (recall), rendendolo inadatto al monitoraggio operativo indipendentemente dalla complessità dell'attività solare del momento.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{Figs/Cap4/best_scenario2.jpg} 
+    \caption[Scenario 2 (Modello Best)]{Visualizzazione in regime di bassa attività solare con Checkpoint Best. Il modello dimostra una perfetta capacità di copertura: tutte le tre regioni attive presenti (box rossi) vengono correttamente identificate e tracciate dal sistema (box blu), confermando l'alta affidabilità del checkpoint selezionato anche su oggetti di piccole dimensioni.}
+    \label{fig:scenario2_best}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{Figs/Cap4/last_scenario2.jpg}
+    \caption[Scenario 2 (Modello Last)]{Confronto sullo stesso frame a bassa attività con Checkpoint Last. Si evidenzia nuovamente l'instabilità dei pesi finali: il modello riesce a rilevare solo la regione più grande (HARP 7366), mancando completamente le due regioni adiacenti più piccole. Ciò conferma che il modello Last ha perso la capacità di generalizzare su segnali più deboli.}
+    \label{fig:scenario2_last}
+\end{figure}
+
+\subsubsection{Terzo Scenario: Coerenza Temporale (Tracking Sequence)}
