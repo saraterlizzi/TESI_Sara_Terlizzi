@@ -228,7 +228,7 @@ Il confronto visivo tra le due Figure (\ref{fig:scenario1_best} e \ref{fig:scena
 
 \subsubsection{Secondo Scenario: Bassa Densità di Regioni Attive}
 Il secondo scenario di test valuta le prestazioni in condizioni di attività solare ridotta, selezionando un magnetogramma (risalente al 6 giugno 2019) caratterizzato da un disco solare prevalentemente quieto, con la presenza di sole tre regioni attive di dimensioni modeste e ben distanziate.\\
-La Figura \ref{fig:scenario2_best} mostra i risultati ottenuti con il checkpoint best. La rete conferma la sua \textbf{eccellente affidabilità}, tracciando correttamente tutte e tre le regioni attive presenti. I bounding box si sovrappongono con precisione alle annotazioni di Ground Truth, dimostrando che il modello è in grado di risolvere anche segnali di intensità minori o dimensioni ridotte, senza generare falsi positivi nelle aree vuote.\\
+La Figura \ref{fig:scenario2_best} mostra i risultati ottenuti con il checkpoint best. La rete conferma la sua \textbf{eccellente affidabilità}, tracciando correttamente tutte e tre le regioni attive presenti. I bounding box si sovrappongono con precisione alle annotazioni di Ground Truth, dimostrando che il modello è in grado di risolvere anche segnali di intensità minori o dimensioni ridotte, senza generare falsi positivi nelle aree vuote o interpretare il rumore di fondo come regione attiva.\\
 Al contrario, la Figura \ref{fig:scenario2_last} evidenzia il comportamento del modello last. Anche in questo contesto semplificato, privo di affollamento, si osserva un \textbf{fallimento} nel rilevare due delle tre regioni presenti, limitandosi a tracciare solo la struttura più evidente. Le altre due regioni sono completamente ignorate, generando falsi negativi. Questo risultato è determinante: attesta che il checkpoint finale soffre di una \textbf{generalizzata perdita di sensibilità} (recall), rendendolo inadatto al monitoraggio operativo indipendentemente dalla complessità dell'attività solare del momento.
 \begin{figure}[H]
     \centering
@@ -243,4 +243,63 @@ Al contrario, la Figura \ref{fig:scenario2_last} evidenzia il comportamento del 
     \label{fig:scenario2_last}
 \end{figure}
 
-\subsubsection{Terzo Scenario: Coerenza Temporale (Tracking Sequence)}
+\subsubsection{Terzo Scenario: Consistenza Temporale}
+La terza casistica esamina la capacità del sistema di mantenere l'identità delle regioni attive nel tempo (\textit{Temporal Consistency}), una proprietà fondamentale per monitorare l'evoluzione dei fenomeni solari. Per questo test, è stata elaborata una sequenza temporale estesa, coprendo un intervallo di quattro giorni durante la fase di alta attività che va dal 14 al 18 Maggio 2012.\\
+La Figura \ref{fig:scenario3_best_sequence} presenta tre frame estratti dalla sequenza video generata dal modello best. In questo scenario, l'assenza dei box di Ground Truth permette di focalizzarsi esclusivamente sulla stabilità del tracciamento predittivo: ogni colore corrisponde ad un ID assegnato con l'utilizzo della libreria Norfair.\\
+L'analisi della sequenza evidenzia una \textbf{notevole robustezza nel tracciamento}, nonostante la rotazione solare e la morfologia mutevole delle regioni attive. È possibile notare, ad esempio, la regione identificata dal bounding box rosso nella parte alta: il sistema aggancia correttamente il 14 Maggio (Pannello \ref{fig:seq_t0}) e ne preserva l'identità (colore invariato) mentre attraversa il meridiano centrale il 16 Maggio (Pannello \ref{fig:seq_t1}) fino a raggiungere il limite sinistro il 18 Maggio (Pannello \ref{fig:seq_t2}). Un comportamento analogo si riscontra per la regione nel rettangolo ciano nella parte bassa. L'assenza di cambi di colore improvvisi (\textit{ID Switching}) conferma che il modello non solo \textbf{localizza gli oggetti}, ma ne \textbf{apprende efficacemente la traiettoria spazio-temporale}. 
+\begin{figure}[H]
+    \centering
+    % --- Frame 1: 14 Maggio ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/best_seq_14may.jpg}
+        \caption{\textbf{14 Maggio 2012}}
+        \label{fig:seq_t0}
+    \end{subfigure}
+    \hfill
+    % --- Frame 2: 16 Maggio ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/best_seq_16may.jpg}
+        \caption{\textbf{16 Maggio 2012}}
+        \label{fig:seq_t1}
+    \end{subfigure}
+    \hfill
+    % --- Frame 3: 18 Maggio ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/best_seq_18may.jpg}
+        \caption{\textbf{18 Maggio 2012}}
+        \label{fig:seq_t2}
+    \end{subfigure}
+    % Didascalia unica per tutta la figura
+    \caption[Scenario 3 (Modello Best)]{Sequenza (Modello Best) che dimostra la stabilità del tracciamento durante la rotazione solare: le regioni attive (ad esempio box rosso in alto e box ciano in basso dal 16 Maggio) mantengono la propria identità (colore) nonostante gli spostamenti significativo attraverso il disco solare.}
+    \label{fig:scenario3_best_sequence}
+\end{figure}
+L'analisi di consistenza temporale (nel medesimo intervallo) estesa al modello Last, riportato in Figura \ref{fig:scenario3_last_sequence}, rivela un \textbf{comportamento duplice}: conferma la \textbf{scarsa sensibilità del rilevatore} poiché, rispetto al Best, il numero di regioni identificate è drasticamente inferiore, con aree attive minori ignorate; tuttavia, il sistema dimostra \textbf{stabilità nel tracciamento} delle regioni rilevate. Osservando il bounding box giallo (in alto) e quello ciano (in basso), è evidente che il modello riesce a preservare l'identità lungo l'arco temporale, seguendone correttamente lo spostamento dovuto alla rotazione solare. Questo risultato indica che le logiche di tracking di Norfair funzionano correttamente; il \textbf{collo di bottiglia prestazionale} risiede nella capacità della rete neurale di estrarre le feature dal singolo feame (detection) e non nella coerenza temporale.
+ \begin{figure}[H]
+    \centering
+    % --- Frame 1: 14 Maggio (Last) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/last_seq_14may.jpg}
+        \caption{\textbf{14 Maggio 2012}}
+        \label{fig:last_seq_t0}
+    \end{subfigure}
+    % --- Frame 2: 16 Maggio (Last) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/last_seq_16may.jpg}
+        \caption{\textbf{16 Maggio 2012}}
+        \label{fig:last_seq_t1}
+    \end{subfigure}
+    % --- Frame 3: 18 Maggio (Last) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figs/Cap4/last_seq_18may.jpg}
+        \caption{\textbf{18 Maggio 2012}}
+        \label{fig:last_seq_t2}
+    \end{subfigure}
+    \caption[Scenario 3 (Modello Last)]{Sequenza (Modello Last) che evidenzia una ridotta capacità di rilevamento ma un tracciamento stabile. La coerenza degli ID (colori) nel tempo (ad esempio box giallo in alto e box ciano in basso) conferma che il modello fallisce nella sensibilità, ma non nella consistenza temporale.}
+    \label{fig:scenario3_last_sequence}
+\end{figure}

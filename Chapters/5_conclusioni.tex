@@ -1,0 +1,39 @@
+\chapter{Conclusioni e Sviluppi Futuri}
+\label{cap:5}
+Questo lavoro di tesi dimostra che l'integrazione tra le moderne tecniche di \textit{Deep Learning} e i dati eliofisici rappresenta una \textbf{strada percorribile e promettente}. Il sistema sviluppato, unendo la capacità di generalizzazione di YOLOv7 alla coerenza temporale di Norfair, pone le basi per la realizzazione di strumenti di monitoraggio in tempo reale sempre più affidabili. Tali strumenti potranno in futuro supportare gli operatori nella previsione degli eventi avversi, contribuendo attivamente alla mitigazione dei rischi associati allo \textit{Space Weather} e alla protezione delle infrastrutture tecnologiche critiche.
+
+\section{Sintesi del Lavoro Svolto}
+Il percorso di ricerca ha affrontato le sfide tipiche dell'applicazione del \textit{Deep Learning} a dati scientifici. In una prima fase, è stata definita una metodologia per la costruzione di un dataset rappresentativo, selezionando campioni significativi del Ciclo Solare 24 e gestendo la complessità del formato nativo HDF5 e dei metadati HARP.\\
+Successivamente, sono stati esplorati due approcci complementari per l'addestramento della rete neurale:
+\begin{itemize}
+    \item \textbf{Approccio Ingegneristico \textit{Proof of Concept}}, focalizzato sull'adattamento del Data Loader di YOLOv7 per l'ingestione diretta dei dati scientifici;
+    \item \textbf{Approccio Operativo}, basato sulla pre-conversione e normalizzazione del dataset, che ha permesso di condurre una sperimentazione estensiva e di validare le performance del modello. 
+\end{itemize}
+Infine, l'integrazione del modulo di tracciamento multi-oggetto ha esteso le capacità del sistema dalla semplice localizzazione statica alla ricostruzione dinamica delle traiettorie, permettendo di preservare l'identità delle regioni attive nonostante la rotazione solare.
+
+\section{Discussione dei Risultati}
+L'analisi sperimentale condotta nel Capitolo \ref{cap:4} ha fornito evidenze quantitative e qualitative rilevanti, delineando sia le potenzialità che i limiti dell'approccio proposto.
+
+\subsection{Efficacia del Deep Learning su Dati Solari}
+I risultati ottenuti con il dataset pre-convertito completo confermano che YOLOv7 è \textbf{idoneo al rilevamento delle regioni attive}, raggiugendo una precisione media (mAP@0.5) di circa 0.60 nella configurazione ottimale. Il sistema ha dimostrato di saper generalizzare correttamente le caratteristiche morfologiche delle regioni attive, distinguendo efficacemente il segnale dal rumore di fondo della fotosfera quieta.\\
+Un risultato cruciale emerge dal confronto tra l'addestramento su dataset ridotto (1 GB) e quello completo (4.75 GB): l'aumento della mole di dati ha agito come potente regolarizzatore, rendendo \textbf{stabile il processo di apprendimento} e migliorando drasticamente la capacità del modello finale di riconoscere le regioni anche al termine del training.
+
+\subsection{Criticità della Selezione del Modello: Best vs Last}
+Uno dei contributi più significativi di questa tesi risiede nell'analisi comparativa tra i \textit{Checkpoint Best} (validati durante il training) e \textit{Last} (stato finale della rete). La sperimentazione ha evidenziato un fenomeno marcato di \textbf{perdita di sensibilità} (\textit{catastrophic forgetting}) nelle fasi finali dell'addestramento, particolarmente evidente nel modello Last. Mentre il modello Best garantisce un'elevata Recall, rilevando sia le grandi strutture centrali che le piccole regioni periferiche, il modello finale tende a diventare eccessivamente conservativo, ignorando le regioni minori. \\
+Questa osservazione ha un'\textbf{implicazione operativa fondamentale}: in un sistema di monitoraggio reale, non è sufficiente affidarsi alla convergenza finale dell'addestramento, ma è imperativo implementare strategie di \textit{Early Stopping} basate su metriche di validazione rigorose.
+
+\subsection{Robustezza del Tracciamento}
+L'integrazione con Norfair ha dimostrato che il tracciamento temporale è un compito robusto, parzialmente disaccoppiato dalla qualità del rilevamento. Anche quando il modello di detection perde sensibilità (come nel caso Last), il sistema di tracking riesce a \textbf{mantenere la coerenza dell'identità} delle regioni attive individuate. Tuttavia, per massimizzare l'affidabilità scientifica e l'indice IDF1, è necessario alimentare il tracker con un rilevatore ad alta sensibilità (modello Best), garantendo continuità temporale anche per le regioni emergenti o in fase di decadimento.
+
+\section{Sviluppi Futuri}
+La sperimentazione effettuata, assieme ai relativi risultati, costituiscono una base solida per ulteriori ricerche. Alla luce delle esperienze maturate e delle tecnologie sviluppate, si identificano le seguenti linee di evoluzione prioritarie.
+
+\subsection{Consolidamento dell'Architettura End-to-End}
+Come discusso nel Capitolo \ref{cap:3} (Sezioni \ref{sec:adattamento_yolo}), è stato sviluppato un \textit{Proof of Concept} (PoC) per permettere a YOLOv7 di leggere nativamente i file HDF5, bypassando la fase di pre-conversione. Sebbene la sperimentazione principale si sia basata su dati convertiti per motivi di efficienza computazionale, il futuro del progetto risiede nel consolidamento di questa architettura \textit{end-to-end}.\\
+Questo approccio potrebbe portare all'\textbf{eliminazione degli artefatti di quantizzazione} introdotti nella conversione a 8-bit, permettendo alla rete neurale di apprendere pattern più sottili direttamente dai valori fisici nel campo magnetico, migliorando potenzialmente la detection di regioni attive deboli o in fase di formazione.
+
+\subsection{Estensione Temporale del Dataset}
+Attualmente, il dataset copre porzioni significative del Ciclo Solare 24. Un'evoluzione necessaria prevede l'\textbf{estensione dell'addestramento} all'intero archivio storico di SDO (oltre un decennio di dati), includendo anche il corrente Ciclo 25. Disporre di un dataset multi-ciclo permetterebbe di applicare tecniche di validazione più robuste per assicurare che il modello non sia influenzato da bias specifici in un determinato periodo di attività solare.
+
+\subsection{Forecasting}
+Il passo logico successivo al rilevamento e tracciamento è la \textbf{previsione} (\textit{forecasting}). Avendo a disposizione le traiettorie storiche e l'evoluzione morfologica estratte dal sistema proposto, è possibile addestrare modelli predittivi (ad esempio reti ricorrenti LSTM o Transformer) per anticipare l'evoluzione delle regioni attive e la possibile insorgenza di Solar Flare.
