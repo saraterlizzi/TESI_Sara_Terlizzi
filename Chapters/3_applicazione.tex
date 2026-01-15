@@ -1,16 +1,15 @@
 \chapter{Applicazione realizzata}
 \label{cap:3}
-Nel presente capitolo, è descritta dettagliatamente l'intera architettura software del sistema sviluppato, focalizzandosi sulle strategie metodologiche adottate per trasformare un framework di Object Detection generico in uno strumento idoneo all'utilizzo di dati astrofisici.\\
-L'analisi si concentra sull'adattamento strutturale del modello YOLOv7. In particolare, è illustrato come esso sia stato esteso per processare i magnetogrammi solari, integrando moduli specifici per la gestione del formato scientifico e per il tracciamento temporale delle predizioni. \\
-Successivamente, viene discusso un approccio alternativo, basato sull'adattamento del dato piuttosto che del modello: un processo di pre-elaborazione che converte i dati scientifici in un formato standard, rendendoli compatibili con l'architettura originale, senza alterarne la struttura interna.
+Nel presente capitolo, è descritta dettagliatamente l'intera architettura software del sistema sviluppato, focalizzandosi sulle strategie metodologiche adottate per trasformare un framework di Object Detection generico in uno strumento idoneo all'utilizzo di dati astrofisici. L'analisi si concentra sull'adattamento strutturale del modello YOLOv7. In particolare, è illustrato come esso sia stato esteso per processare i magnetogrammi solari, integrando moduli specifici per la gestione del formato scientifico e per il tracciamento temporale delle predizioni. Successivamente, viene discusso un approccio alternativo, basato sull'adattamento del dato piuttosto che del modello: un processo di pre-elaborazione che converte i dati scientifici in un formato standard, rendendoli compatibili con l'architettura originale, senza alterarne la struttura interna.
 
 \section{Adattamento del modello YOLOv7}
 \label{sec:adattamento_yolo}
 L'utilizzo di un modello di Object Detection generico come YOLOv7 nel dominio dell'astrofisica solare pone una sfida architetturale notevole: l'incompatibilità del framework con i formati di dati scientifici.\\
-In questa sezione, è illustrata la metodologia adottata per estendere le capacità di input del modello, abilitando il sistema all'interpretazione dei dati HARP. L'obiettivo è stato quello di superare i vincoli imposti dai formati di immagine tradizionali (attesi dal modello), garantendo che l'informazione fisica contenuta nei magnetogrammi venisse oreservata integralmente durante il processo di caricamento.
+In questa sezione, è illustrata la metodologia adottata per estendere le capacità di input del modello, abilitando il sistema all'interpretazione dei dati. L'obiettivo è stato quello di superare i vincoli imposti dai formati di immagine tradizionali (attesi dal modello), garantendo che l'informazione fisica contenuta nei magnetogrammi venisse oreservata integralmente durante il processo di caricamento.
+
 \subsection{Implementazione di un Data Loader per Dati Scientifici}
 \label{sec:dataset_h5}
-Come ampiamente anticipato, l'architettura di YOLOv7 è vincolata all'uso di immagini standard (es. \texttt{JPEG, PNG}) e annotazioni testuali esplicite. I dati HARP, al contrario, presentano una complessità strutturale data da:
+Come ampiamente anticipato, l'architettura di YOLOv7 è vincolata all'uso di immagini standard (es. \texttt{JPEG, PNG}) e annotazioni testuali esplicite. I dati, al contrario, presentano una complessità strutturale data da:
 \begin{itemize}
     \item \textbf{Formato contenitore:} i dati sono racchiusi da un formato \texttt{HDF5} (\texttt{.h5}), ovvero un file system gerarchico pensato per dati scientifici. All'interno del singolo file, i dati sono suddivisi in gruppi distinti e non solo come una semplice immagine.
     \item \textbf{Annotazioni implicite:} le coordinate delle bounding box non sono fornite esplicitamente, bensì è necessaria l'estrazione, partendo dagli attributi incastonati nella gerarchia del file.
@@ -43,7 +42,7 @@ Per colmare tale divario, è stato progettato ed implementato un \textbf{modulo 
         \item \textbf{Pre-processing}: Se la lettura ha successo, il magnetogramma subisce una catena di trasformazioni per diventare un input valido per la rete neurale:
         \begin{enumerate}
             \item \textbf{Trattamento delle Anomalie Numeriche}: I dati scientifici possono contenere valori non validi come \texttt{Nan} (Not A Number) o \texttt{inf} (infinito), spesso causati da errori di misurazione o di calcolo. Non essendo valori numericamente stabili, se passati ad una rete neurale, causerebbero un fallimento nel processo di training. Per questo, è eseguita una pulizia preventiva che sostituisce le eventuali occorrenze di tali valori con il valore neutro \texttt{(0.0)}.
-            \item \textbf{Clipping Dinamico}: I magnetogrammi presentano una notevole variazione di intensità tra le diverse aree, ma i valori più significativi per l'identificazione delle regioni attive si trovano in un intervallo specifico, mentre valori oltremodo alti o bassi rappresentano -nella maggior parte dei casi- rumori. Per questo motivo è necessaria un'operazione di \textit{clipping}: si "tagliano" i valori del magnetogramma, forzando tutti i pixel al di fuori a rientrare nell'intervallo predefinito, aiutando in questo modo il modello a concentrarsi sulle caratteristiche più significative.
+            \item \textbf{Clipping Dinamico}: I magnetogrammi presentano una notevole variazione di intensità tra le diverse aree, ma i valori più significativi per l'identificazione delle regioni attive si trovano in un intervallo specifico. Per questo motivo è necessaria un'operazione di \textit{clipping}: si "tagliano" i valori del magnetogramma, forzando tutti i pixel al di fuori a rientrare nell'intervallo predefinito, aiutando in questo modo il modello a concentrarsi sulle caratteristiche più significative.
             \item \textbf{Normalizzazione Min-Max}: Poiché le reti neurali apprendono più efficientemente quando i dati in input sono scalati in un intervallo piccolo, si applica una normalizzazione che riscala tutti i valori dei pixel all'interno dell'intervallo \texttt{[0,1]}, garantendo la stessa scala di valori che accelera la convergenza del training.
             \item \textbf{Ridimensionamento}: Poiché YOLOv7 richiede una dimensione di input standard (impostata a 640x640), i magnetogrammi sono ridimensionati, utilizzando un'interpolazione lineare che rappresenta un ottimo compromesso tra qualità visiva e velocità di calcolo.
             \item \textbf{Conversione a 3 Canali}: Dato che YOLOv7 accetta unicamente immagini a tre canali (RGB), è stato necessario rendere i magnetogrammi (a singolo canale) compatibili, per cui il canale unico è stato duplicato tre volte. Ciò significa che non viene aggiunta informazione, ma c'è un semplice riadattamento del dato all'input richiesto dal modello. Infine, avviene la conversione in un tensore PyTorch.
@@ -55,7 +54,7 @@ Il dettaglio implementativo completo della classe è riportato nel Codice \ref{l
 
 \subsection{Integrazione del Data Loader nella Logica di Training}
 La predisposizione del modulo di caricamento dati è un passo necessario, ma non sufficiente per l'adattamento completo del modello. Affinchè la nuova logica di gestione dei dati scientifici divenga operativa, è stato necessario integrarla organicamente nel flusso di lavoro.\\
-Di conseguenza, la strategia adottata ha previsto un'estensione strutturale dei motori di addestramento e validazione. L'obiettivo è stato quello di rendere l'architettura capace di accogliere e processare i tensori magnetografici, gestendo le specificità del formato scientifico senza compromettere la stabilità delle procedure di ottimizzazioni originali.
+Di conseguenza, la strategia adottata ha previsto un'estensione strutturale dei motori di addestramento e validazione. L'obiettivo è stato quello di rendere l'architettura capace di accogliere e processare i tensori (che rappresentano i magnetogrammi), gestendo le specificità del formato scientifico senza compromettere la stabilità delle procedure di ottimizzazioni originali.
 
 \subsubsection{Adattamento della Logica di Training}
 L'estensione del modulo di caricamento dati ha richiesto un adeguamento strutturale del motore di addestramento. L'obiettivo primario è stato quello di rendere il modello capace di selezionare dinamicamente la strategia di ingestione dei dati più appropriata - standard o scientifica - senza alterare il flusso logico del ciclo di addestramento. Per ottenere ciò, sono state apportate le seguenti strategie architetturali:
@@ -64,7 +63,7 @@ L'estensione del modulo di caricamento dati ha richiesto un adeguamento struttur
     Il modulo di caricamento personalizzato è stato integrato nell'ambiente di addestramento in modo condizionale, rendendo le classi disponibili al sistema solo al momento dell'inizializzazione del dataset, garantendo una gestione pulita delle dipendenze.\\
     Vedi Codice \ref{lst:train_import} in Appendice \ref{app:codice}.
     \item \textbf{Strategia di Assemblaggio dei Batch (\textit{Batch Collation})}\\
-    Di fondamentale importanza è stata l'implementazione di una logica di aggregazione personalizzata per gestire la corretta formazione dei lotti di dati (\textit{batch}). Quando il sistema raggruppa più campioni, è fondamentale mantenere un'associazione univoca tra tensori magnetici e relative etichette spaziali. La procedura sviluppata assegna un indice posizionale a ciascuna annotazione all'interno del batch, risolvendo le ambiguità strutturali tipiche dei dati complessi. Questo ordinamento permette al modello di correlare le predizioni con le \textit{ground truth} per ogni singolo magnetogramma, passaggio essenziale per il calcolo della funzione di perdita (\textit{loss function}).\\
+    Di fondamentale importanza è stata l'implementazione di una logica di aggregazione personalizzata per gestire la corretta formazione dei lotti di dati (\textit{batch}). Quando il sistema raggruppa più campioni, è fondamentale mantenere un'associazione univoca tra tensori (che rappresentano i magnetogrammi) e relative etichette spaziali. La procedura sviluppata assegna un indice posizionale a ciascuna annotazione all'interno del batch, risolvendo le ambiguità strutturali tipiche dei dati complessi. Questo ordinamento permette al modello di correlare le predizioni con le \textit{ground truth} per ogni singolo magnetogramma, passaggio essenziale per il calcolo della funzione di perdita (\textit{loss function}).\\
     La logica di assemblaggio del batch è illustrata nel Codice \ref{lst:train_collate} in Appendice \ref{app:codice}.
     \item \textbf{Attivazione Contestuale tramite Configurazione} \\
     Per garantire una completa flessibilità del sistema, piuttosto che utilizzare un argomento da riga di comando, è stato implementato un meccanismo di \textit{attivazione contestuale} basato sul file di configurazione del dataset. All'avvio, il sistema analizza i metadati di configurazione: la presenza di un identificatore specifico (\textit{flag}) istruisce il framework sulla natura scientifica del dato, innescando automaticamente il meccanismo dedicato senza richiedere interventi manuali.\\
@@ -114,7 +113,7 @@ La chiamata modificata alla funzione di plotting è nel Codice \ref{lst:test_plo
 
 \subsubsection{Personalizzazione delle Utility di Visualizzazione}
 L'ultimo tassello nell'adattamento del framework ha riguardato la corretta rappresentazione grafica dei risultati all'interno del modulo di visualizzazione. Nella sua versione originale, il sistema è progettato per operare esclusivamente su immagini a tre canali (BGR), presupponendo che l'input sia sempre un'immagine standard.\\
-Applicare questa logica direttamente ai magnetogrammi - che sono dati scientifici a singolo canale rappresentanti l'intensità del campo magnetico - avrebbe prodotto un output visivamente incomprensibile (falsi colori e perdita di contrasto), rendendo impossibile la distinzione delle polarità, informazione cruciale per l'analisi fisica. \\
+Applicare questa logica direttamente ai magnetogrammi - che sono dati scientifici a singolo canale rappresentanti l’intensità e la polarità dei campi magnetici sulla fotosfera del Sole - avrebbe prodotto un output visivamente incomprensibile (falsi colori e perdita di contrasto), rendendo impossibile la distinzione delle polarità, informazione cruciale per l'analisi fisica. \\
 L'obiettivo è stato, quindi, quello di integrare una logica di visualizzazione personalizzata che si attiva esclusivamente in presenza di dati scientifici. Tale logica include l'applicazione di mappe cromatiche specifiche, la correzione dell'orientamento geometrico e il conseguente adattamento delle coordinate delle bounding box. Allo stesso tempo, è stata mantenuta la piena compatibilità con i dataset standard.\\
 Per raggiungere questo scopo, la procedura di visualizzazione è stata modificata attraverso i seguenti interventi:
 \begin{itemize}
@@ -172,9 +171,9 @@ Il codice completo della procedura di conversione è riportato nel Codice \ref{l
 \subsection{Seconda Fase: Post-Processing e Mascheramento dello Sfondo}
 La procedura di conversione appena descritta introduce un \textit{artefatto sistematico} legato alla gestione dei valori nulli dello sfondo. Durante la fase di pre-processing, i valori esterni al disco solare (\texttt{NaN}) vengono sostituiti con il valore neutro \texttt{0.0}. A seguito della normalizzazione Min-Max nell'intervallo \texttt{[-1500,1500]}, tale valore zero si colloca al centro del range dinamico \texttt{0.5} che, nella conversione finale a 8-bit, viene mappato nel valore 127.\\
 Il risultato è un'immagine in cui lo sfondo, anziché essere nero, appare come un \textbf{grigio medio}, risultando indistinguibile dalle aree inattive del disco solare stesso (anch'esso rappresentato in scala di grigi). Questa ambiguità visiva riduce drasticamente il contrasto e introduce rumore di fondo che compromette la convergenza dell'addestramento, come evidenziato in figura~\ref{fig:artefatto_grigio}.
-\begin{figure}[H]
+\begin{figure}[tb]
   \centering
-  \includegraphics[width=0.5\textwidth]{Figs/Cap3/esempio_con_artefatto.jpg}
+  \includegraphics[width=0.6\textwidth]{Figs/Cap3/esempio_con_artefatto.jpg}
   \caption[Artefatto di conversione H5] 
   {Esempio visivo dell'artefatto generato dalla routine di conversione primaria. Come si può osservare, lo sfondo è renderizzato come un grigio medio, rendendo il confine del disco solare (anch'esso in scala di grigi) visivamente ambiguo. Questa mancanza di bordo netto introduce rumore spuro nel dataset.}
   \label{fig:artefatto_grigio}
@@ -189,16 +188,16 @@ La procedura esegue le seguenti operazioni su ciascun campione generato:
 \end{enumerate}
 L'algoritmo per l'applicazione della maschera circolare è consultabile nel Codice \ref{lst:script_convert} in Appendice \ref{app:codice}.\\
 L'efficacia di questo intervento è immediata: il mascheramento ripristina il corretto rapporto segnale-rumore, garantendo che la rete neurale processi esclusivamente le informazioni pertinenti, come mostrato in figura~\ref{fig:immagine_mascherata}
-\begin{figure}[H]
+\begin{figure}[tb]
   \centering
-  \includegraphics[width=0.5\textwidth]{Figs/Cap3/esempio_mascherato.jpg}
+  \includegraphics[width=0.6\textwidth]{Figs/Cap3/esempio_mascherato.jpg}
   \caption[Risultato della maschera circolare] 
   {Risultato dell'applicazione del modulo di mascheramento sull'immagine precedentemente affetta da artefatti (mostrata nella figura~\ref{fig:artefatto_grigio}). L'operazione ha rimosso con successo lo sfondo grigio, forzandolo a nero puro. L'immagine ora presenta un contrasto netto tra il disco solare e lo sfondo, fornendo un input di addestramento pulito e privo di ambiguità.}
   \label{fig:immagine_mascherata}
 \end{figure}
 
 \section{Tracking Multi-Oggetto con Norfair}
-Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale. Le regioni attive solari, infatti, non sono entità statiche, ma evolvono nel tempo, spostandosi e modificando la loro morfologia attraverso la rotazione solare.\\
+Solo dopo aver terminato l'adattamento di YOLOv7, è stato possibile sviluppare un'applicazione in grado di utilizzare il suddetto modello addestrato per eseguire un'analisi temporale. Le regioni attive solari, infatti, non sono entità statiche, ma evolvono nel tempo, spostandosi e modificando la loro morfologia.\\
 Per tracciare tali evoluzioni, è stata integrata -come ampiamente anticipato- la libreria \textbf{Norfair}, una soluzione modulare che implementa un approccio di tipo \textit{tracking-by-detection}. In questo paradigma, il modello neurale (YOLOv7) opera su ogni singolo fotogramma in modo indipendente, mentre il modulo di tracciamento si occupa di associare le rilevazioni tra istanti temporali consecutivi, assegnando un identificativo univoco (ID) a ciascun oggetto e mantenendolo consistente nel tempo.
 
 \subsection{Implementazione del Modulo di Tracciamento}
@@ -209,7 +208,7 @@ Il cuore del sistema è costituito da un processo di elaborazione sequenziale pr
     \item \textbf{Inferenza e Transcodifica}\\
     Per ogni frame, la rete neurale genera le bounding box delle regioni attive. Una routine di interfaccia converte i tensori di output originali in oggetti strutturati compatibili con il motore di tracciamento, preservando le coordinate spaziali ed i punteggi di confidenza.
     \item \textbf{Associazione Temporale}\\
-    Il tracker calcola la distanza tra le rilevazioni correnti e la stima della posizione degli oggetti tracciati nei frame precedenti. Data la natura fisica del problema (le macchie solari si muovono con dinamiche fluide e prevedibili), è stata adottata la metrica \textit{IoU} (Inserction over Union) come criterio di associazione: se la sovrapposizione spaziale tra la predizione attuale e quella passata supera una soglia critica, l'identità dell'oggetto viene preservata.
+    Il tracker calcola la distanza tra le rilevazioni correnti e la stima della posizione degli oggetti tracciati nei frame precedenti. Data la natura fisica del problema, è stata adottata la metrica \textit{IoU} (Inserction over Union) come criterio di associazione: se la sovrapposizione spaziale tra la predizione attuale e quella passata supera una soglia critica, l'identità dell'oggetto viene preservata.
     \item \textbf{Sintesi dell'Output}\\
     Al termine del processo, il sistema aggrega i risultati visuali, generando un video riassuntivo che mostra l'evoluzione dinamica delle regioni attive, con i relativi colori identificativi sovraimpressi per facilitare l'analisi visiva.
 \end{enumerate}
@@ -223,9 +222,5 @@ Poiché il calcolo di tali metriche richiede uno standard di annotazione specifi
     \item \textbf{Inizializzazione dell'Ambiente di Test}: Configura gli accumulatori statici necessari per registrare le associazioni corrette, le mancate rilevazioni e gli scambi di identità (\textit{ID switches}).
     \item \textbf{Benchmarking Frame-by-Frame}: Confronta sequenzialmente le traiettorie generate dal tracker con i dati reali, producendo un report analitico dettagliato.
 \end{itemize}
-Questa infrastruttura di test permette do valutare oggettivamente la capacità del modello di mantenere stabile l'identità di una regione attiva anche in presenza di variazioni morfologiche rapide o occlusioni spaziali. \\
+Questa infrastruttura di test permette di valutare oggettivamente la capacità del modello di mantenere stabile l'identità di una regione attiva anche in presenza di variazioni morfologiche rapide o occlusioni spaziali. \\
 Il codice relativo al calcolo delle metriche è consultabile nel Codice \ref{lst:track_metrics} in Appendice \ref{app:codice}.
-
-\section{Introduzione alla Sperimentazione}
-In questo capitolo, sono state presentate le strategie per adattare YOLOv7 al dominio dell'astrofisica solare, esplorando un \textit{duplice approccio}: da un lato, l'estensione profonda del framework per la gestione nativa dei dati scientifici, utilizzata come \textit{proof-of-concept} per validare la fattibilità tecnica dell'apprendimento su dati grezzi; dall'altro, lo sviluppo di un processo di pre-elaborazione per la normalizzazione e quantizzazione dei magnetogrammi. Inoltre, sono stati illustrati i moduli integrati per la visualizzazione dei risultati fisici e per il tracciamento temporale delle regioni attive.\\
-Nel prossimo capitolo, verranno analizzati i risultati della sperimentazione, basati sulla \textbf{strategia di pre-conversione del dataset}: tale approccio, infatti, si è rivelato il più idoneo per una sperimentazione estensiva, permettendo di valutare la robustezza del sistema tramite le metriche di rilevamento e tracciamento su larga scala.

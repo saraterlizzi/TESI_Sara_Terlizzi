@@ -1,5 +1,103 @@
 \chapter{Sperimentazione e Analisi dei Risultati}
 \label{cap:4}
+Il presente capitolo è dedicato alla fase operativa e alla validazione sperimentale. L'analisi si concentra esclusivamente sulla seconda strategia descritta, ovvero quella di pre-conversione del dataset, rivelatasi la più idonea per condurre una sperimentazione estensiva e per valutare l'efficienza del sistema. Il discorso si apre con la descrizione dei dati utilizzati e dalla motivazione della loro selezione. Successivamente, sono discussi i risultati quantitativi e qualitativi ottenuti nelle due differenti configurazioni sperimentali (Subset ridotto e Dataset completo), per concludere con la discussione delle capacità di tracciamento temporale delle regioni attive.
+
+\section{Dati}
+\subsection{Definizione e Significato dei Dati Osservativi}
+Il Solar Dynamics Observatory (SDO) è una missione spaziale della NASA, lanciata nel 2010, dedicata allo studio continuo dell'attività solare e dei suoi effetti sulla Terra e sullo spazio circumterrestre \cite{pesnell2012sdo}. Tra gli strumenti scientifici a bordo di SDO, il Helioseismic and Magnetic Imager (HMI) fornisce accurate misure del campo magnetico fotosferico sull'intero disco solare, denominate magnetogrammi, con elevata risoluzione spaziale e temporale \cite{scherrer2012hmi}. I magnetogrammi hanno una dimensione di 4096 × 4096 pixel e costituiscono una base osservativa fondamentale per lo studio delle strutture magnetiche solari e della loro evoluzione, in particolare delle regioni attive.\\
+Le regioni attive solari rappresentano manifestazioni localizzate di intensa attività magnetica sulla fotosfera e sono caratterizzate da forti concentrazioni di flusso magnetico. Esse sono comunemente associate alla presenza di macchie solari e costituiscono le sedi principali di fenomeni energetici quali brillamenti solari ed espulsioni di massa coronale \cite{priest2014mhd}. Nei magnetogrammi, le regioni attive si distinguono chiaramente dal fondo della fotosfera quieta grazie a valori elevati del campo magnetico, con polarità opposte ben definite e spazialmente correlate.\\
+La pipeline di HMI identifica e traccia automaticamente le regioni di attività magnetica, denominate \textbf{HMI Active Region Patches (HARP)}.
+Ogni HARP è numerata ed è associata a una sequenza temporale di mappe (\textit{bitmaps}) sufficientemente estese da contenere l'intera evoluzione spaziale della regione attiva durante la sua visibilità sul disco solare. Ciascuna HARP corrisponde a una singola regione attiva o a un complesso di regioni attive ed è tracciata in modo coerente nel tempo. I dati HARP forniscono principalmente informazioni di tipo geometrico sulla regione attiva, mantenendo il riferimento alla sua posizione sul disco solare. La Figura \ref{fig:hmi_example} mostra un esempio magnetogramma \textit{full-disk}.
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=0.8\textwidth]{Figs/Cap2/HARP.png} 
+  \caption[Esempio di magnetogramma HMI con regioni attive]{Esempio di magnetogramma HMI \textit{full-disk}: le regioni attive (delineate dalle \textit{bounding box}) emergono dal fondo della fotosfera quieta (grigia) sotto forma di concentrazioni bipolari di campo magnetico (bianco e nero).}
+  \label{fig:hmi_example}
+\end{figure}
+
+\subsection{Finalità e utilizzi}
+I magnetogrammi prodotti da HMI permettono di analizzare direttamente la distribuzione e l'intensità del campo magnetico fotosferico, che rappresenta la grandezza fisica fondamentale alla base della formazione e dell'evoluzione delle regioni attive.\\
+La disponibilità di osservazioni \textit{full-disk}, continue nel tempo e distribuite su lunghe scale temporali, consente non solo l'identificazione delle regioni attive sull'intero disco solare, ma anche il loro monitoraggio durante le diverse fasi del ciclo solare. Le HARP forniscono inoltre una descrizione strutturata delle regioni attive, permettendo di seguirne l'evoluzione spaziale e temporale in modo coerente e sistematico.\\
+In questo lavoro, tali dati sono utilizzati come base osservativa per lo sviluppo di metodologie di rilevamento e tracciamento automatico delle regioni attive. L'informazione magnetica contenuta nei magnetogrammi e la segmentazione fornita dalle HARP rendono infatti questi dati particolarmente adatti ad applicazioni di object detection e tracking temporale, consentendo lo studio dell'evoluzione delle regioni attive.
+
+\subsection{Origine, Selezione e Organizzazione del Dataset}
+I dati utilizzati in questo lavoro sono disponibili pubblicamente tramite il Joint Science Operations Center (JSOC). I magnetogrammi full-disk sono forniti dalla serie \texttt{hmi.M\_720s}, mentre l'informazione geometrica relativa alle regioni attive è contenuta nella serie \texttt{hmi.Mharp\_720s}. Poiché l'archivio HMI copre un intervallo temporale molto esteso (oltre quindici anni), è stata definita una strategia di selezione volta a costruire un dataset rappresentativo ma computazionalmente gestibile.\\
+La selezione temporale è stata guidata dall'andamento dell'attività solare durante il \textbf{Ciclo Solare 24}, ossia il ciclo quasi periodico di circa 11 anni che descrive la variazione dell'attività magnetica del Sole, comunemente tracciata attraverso il numero di macchie solari. Durante il massimo di un ciclo solare si osserva una maggiore attività magnetica, che si traduce in un numero più elevato di regioni attive. In particolare, il campionamento è stato limitato a un sottointervallo del ciclo (anni 2011-2019) e reso più denso nei periodi di maggiore attività: gli anni 2012-2014 sono stati intenzionalmente sovracampionati rispetto agli altri, così da aumentare la presenza di esempi contenenti regioni attive e una variabilità magnetica più marcata.\\
+Successivamente, i dati sono stati suddivisi in training, validation e test set, evitando sovrapposizioni temporali tra i diversi insiemi. La procedura (implementata dalla dottoranda Elizabeth Doria Rosales nel Codice \ref{lst:dataset_generation} in Appendice \ref{app:codice}) prevede la selezione di finestre temporali di durata 90 giorni, all'interno delle quali vengono assegnati segmenti temporali consecutivi ai tre sottoinsiemi secondo le proporzioni 70\% / 15\% / 15\%. Tra un sottoinsieme e il successivo viene inoltre introdotto un intervallo di separazione di 15 giorni, riducendo ulteriormente il rischio di \textit{data leakage} dovuto alla persistenza e all’evoluzione delle stesse strutture magnetiche.\\
+La distribuzione risultante dei segmenti temporali rispetto all'andamento del ciclo solare è mostrata in Figura \ref{fig:dataset_splits}
+\begin{figure}[tb]
+    \centering
+    \includegraphics[width=1\textwidth]{Figs/Cap2/splits.jpg}
+    \caption[Campionamento temporale del dataset]{Andamento del numero di macchie solari durante il Ciclo 24 (2011-2019). Le aree colorate indicano gli intervalli temporali selezionati per il Training (verde), la Validazione (giallo) e il Test (rosso).}
+    \label{fig:dataset_splits}
+\end{figure}
+Il risultato di questa procedura è un insieme di periodi temporalmente disgiunti, bilanciati rispetto alle diverse fasi del ciclo solare e già strutturati nei rispettivi split, salvati in un file di configurazione (CSV) contenente, per ciascun sottoinsieme, le date di inizio e fine dei segmenti selezionati. Per completezza, la Tabella \ref{tab:splits_full} riporta l'elenco completo degli intervalli temporali generati.
+\begin{table}[tb]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{ccc}
+        \hline
+        \textbf{Training} & \textbf{Validation} & \textbf{Test} \\
+        \textit{(Start -- End)} & \textit{(Start -- End)} & \textit{(Start -- End)} \\
+        \hline
+        2011-05-30 -- 2011-07-30 & 2011-08-15 -- 2011-08-27 & 2011-09-12 -- 2011-09-24 \\
+        2012-01-22 -- 2012-03-23 & 2012-04-08 -- 2012-04-20 & 2012-05-06 -- 2012-05-18 \\
+        2012-08-23 -- 2012-10-23 & 2012-11-08 -- 2012-11-20 & 2012-12-06 -- 2012-12-18 \\
+        2013-02-28 -- 2013-04-30 & 2013-05-16 -- 2013-05-28 & 2013-06-13 -- 2013-06-25 \\
+        2013-07-07 -- 2013-09-06 & 2013-09-22 -- 2013-10-04 & 2013-10-20 -- 2013-11-01 \\
+        2014-01-21 -- 2014-03-23 & 2014-04-08 -- 2014-04-20 & 2014-05-06 -- 2014-05-18 \\
+        2014-06-10 -- 2014-08-10 & 2014-08-26 -- 2014-09-07 & 2014-09-23 -- 2014-10-05 \\
+        2015-06-19 -- 2015-08-19 & 2015-09-04 -- 2015-09-16 & 2015-10-02 -- 2015-10-14 \\
+        2016-07-10 -- 2016-09-09 & 2016-09-25 -- 2016-10-07 & 2016-10-23 -- 2016-11-04 \\
+        2017-05-11 -- 2017-07-11 & 2017-07-27 -- 2017-08-08 & 2017-08-24 -- 2017-09-05 \\
+        2018-06-01 -- 2018-08-01 & 2018-08-17 -- 2018-08-29 & 2018-09-14 -- 2018-09-26 \\
+        2019-02-18 -- 2019-04-20 & 2019-05-06 -- 2019-05-18 & 2019-06-03 -- 2019-06-15 \\
+        \hline
+    \end{tabular}
+    \caption[Suddivisione temporale completa del dataset]{Elenco completo degli intervalli temporali (2011-2019). Ogni riga rappresenta una finestra temporale suddivisa in Train, Validation e Test.}
+    \label{tab:splits_full}
+\end{table}
+Questa organizzazione costituisce la base per il successivo scaricamento dei dati HMI corrispondenti e delle informazioni associate alle regioni attive identificate, eseguito tramite il Codice \ref{lst:download_script} in Appendice \ref{app:codice}.
+
+\subsection{Applicazioni nel presente lavoro}
+Nel contesto di questa tesi, i dati HARP vengono impiegati per delineare bounding box attorno alle regioni attive nelle immagini solari, consentendo l'isolamento automatico delle aree di interesse per l'analisi. Essi permettono inoltre di monitorare l'evoluzione temporale di ciascuna regione, così da individuare variazioni morfologiche e magnetiche nel tempo.
+
+\subsection{Struttura del file}
+Ogni file è denominato con \texttt{hmi\_magnetogram\_YYYY\_MM\_DD\_MIN\_HH.h5} e contiene due gruppi:
+\begin{itemize}
+    \item \texttt{harp/metadata}, al cui interno sono presenti più sottogruppi \texttt{HARP\_XXXX}, ognuno dei quali corrisponde ad una regione attiva ed ospita una ricca collezione di metadati relativi alla regione stessa, ad esempio: coordinate, estensione e localizzazione della regione nel Sole, qualità dei dati, versioni del software e informazioni sul satellite.
+    \item \texttt{magnetogram}, che include i dati scientifici sotto forma di una matrice rappresentativa del campo magnetico fotosferico (ossia l’immagine del disco solare che descrive la distribuzione del campo magnetico), e i metadati associati, contenenti le informazioni descrittive relative al magnetogramma stesso.
+\end{itemize}
+
+\subsection{Metadati HARP di interesse}
+Poiché ogni regione attiva ha decine di attributi, si riportano nella Tabella \ref{tab:campi-harp} esclusivamente quelli più significativi ai fini del lavoro di tesi:
+\FloatBarrier
+\begin{table}[tb]
+\centering
+\begin{tabular}{p{0.35\textwidth} p{0.6\textwidth}}
+\hline
+\textbf{Campo} & \textbf{Significato} \\
+\hline
+HARPNUM & Numero identificativo univoco della regione attiva solare (HARP) \\
+CRPIX1, CRPIX2 & Coordinate (in pixel) dell’angolo in basso a sinistra della regione nella CCD HMI \\
+CRSIZE1, CRSIZE2 & Larghezza e altezza (in pixel) del bounding box della regione attiva \\
+AREA & Area della regione proiettata sul disco solare, espressa in micro-emisferi solari \\
+T\_REC & Informazioni temporali della serie \\
+\hline
+\end{tabular}
+\caption[Campi di interesse nei dati HARP]{Descrizione dei metadati principali utilizzati per identificare, localizzare e caratterizzare le regioni attive HARP nei magnetogrammi solari.}
+\label{tab:campi-harp}
+\end{table}
+La selezione dei campi elencati nella Tabella \ref{tab:campi-harp} è stata guidata dalla necessità di delimitare spazialmente e ordinare temporalmente le regioni attive solari sul disco solare, al fine di sviluppare un sistema automatico di rilevamento e tracciamento delle stesse. Di seguito vengono motivate le scelte effettuate:
+\begin{itemize}
+    \item \textbf{HARPNUM} è il codice univoco associato a ciascuna HARP ed è utilizzato come chiave primaria per il raggruppamento delle osservazioni successive nel tempo. Questo campo è essenziale per la costruzione di sequenze temporali coerenti, da fornire a moduli di tracking multi-frame.
+    \item \textbf{CRPIX1, CRPIX2} e \textbf{CRSIZE1, CRSIZE2} definiscono il bounding box della HARP all’interno del magnetogramma full-disk. Tali coordinate sono utilizzate per delimitare spazialmente le regioni attive, le cui posizioni vengono successivamente convertite in coordinate normalizzate. Questi campi risultano quindi fondamentali sia per la preparazione del dataset di addestramento sia per il post-processing delle predizioni.
+    \item \textbf{AREA} fornisce una misura dell’estensione fisica della regione attiva, espressa in micro-emisferi solari. Questo parametro può essere impiegato per filtrare regioni di dimensioni molto ridotte o affette da rumore, spesso non associate a eventi di flare significativi.
+    \item \textbf{T\_REC} rappresenta il timestamp del record ed è utilizzato per ordinare cronologicamente i dati corrispondenti a una determinata HARP.
+\end{itemize}
+L’insieme di questi metadati consente di costruire un dataset strutturato e annotato, in cui ogni regione attiva è localizzata, descritta magneticamente e tracciata nel tempo, con possibilità di associare ground truth fisiche (flare, classe morfologica) per l’addestramento e la valutazione di modelli di detection e tracking ed, eventualmente, \textit{forecasting}.
+
 \section{Preparazione del Dataset}
 La fase sperimentale del presente lavoro di tesi si è basata sul dataset SDO/HMI relativo al Ciclo Solare 24. Una delle sfide principali è stata la gestione dell'enorme mole di dati scientifici grezzi e la loro predisposizione in un formato compatibile con le risorse computazionali a disposizione.
 
@@ -20,7 +118,7 @@ L'applicazione della pipeline di pre-elaborazione all'intero archivio ha prodott
 \label{sec:configurazione_esperimenti}
 Per valutare le prestazioni del modello YOLOv7 e l'impatto della quantità di dati su di esse, la sperimentazione è stata suddivisa in due configurazioni distinte, entrambe basate sul dataset convertito:
 \begin{itemize}
-    \item \textbf{Subset Ridotto - 1 GB}: Addestramento pilota su una porzione ridotta del dataset, al fine di validare rapidamente la convergenza degli iperparametri e la correttezza della pipeline.
+    \item \textbf{Subset Ridotto - 1 GB}: Addestramento pilota su una porzione ridotta del dataset, al fine di validare rapidamente la convergenza del modello in funzione della scelta degli iperparametri e la correttezza della pipeline.
     \item \textbf{Dataset Completo - 4,75 GB}: Addestramento definitivo sul dataset intero preparato dalla dottoranda Elizabeth Doria Rosales, volto a massimizzare la capacità di generalizzazione del modello.
 \end{itemize}
 Per entrambe le configurazioni, in seguito alla fase di training, sono stati generati due \textit{checkpoint} del modello:
@@ -38,7 +136,7 @@ L'addestramento sul Subset ridotto ha rappresentato la \textbf{prima fase sperim
 \subsubsection{Training}
 L'analisi dell'andamento dell'addestramento è visibile nei grafici complessivi generati durante le epoche. Come si osserva nella Figura \ref{fig:results_1gb} riportata di seguito, il modello raggiunge il suo picco prestazionale attorno all'epoca 50. In questa fase, le metriche di validazione (in particolare mAP e Recall) trovano i valori massimi, indicando che la rete sta imparando correttamente le caratteristiche morfologiche delle regioni attive.\\
 Tuttavia, proseguendo l'addestramento oltre questo punto, si nota una \textbf{divergenza critica}: mentre il modello continua a minimizzare la \textit{loss} sui dati di training (segno che sta memorizzando gli esempi), le prestazioni sui dati di validazione iniziano a scendere costantemente invece di stabilizzarsi. Questo è il segnale inequivocabile che il dataset da 1 GB non possiede una varianza sufficiente per sostenere un addestramento lungo senza incorrere in overfitting.
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
     \includegraphics[width=1\textwidth]{Figs/Cap4/results_1gb.png} 
     \caption[Curve di addestramento e validazione (Subset 1 GB)]{Curve di addestramento e validazione per il subset da 1 GB. È evidente il picco di prestazioni (mAP@0.5 $\approx$ 0.6) attorno all'epoca 50, seguito da un lento ma inesorabile degrado delle metriche di validazione.}
@@ -46,12 +144,11 @@ Tuttavia, proseguendo l'addestramento oltre questo punto, si nota una \textbf{di
 \end{figure}
 
 \subsubsection{Test (Checkpoint Best)}
-Il \textbf{\textit{checkpoint} Best} rappresenta lo stato del modello salvato dal sistema in presenza della massima performance sul validation set (corrispondente al picco discusso sopra). In questa fase "ideale", nonostante la limitata quantità di dati, il modello era riuscito a generalizzare correttamente.\\
-I test effettuati su questo checkpoint hanno prodotto risultati molto incoraggianti, con una mAP@0.5 di 0.604, Precision e Recall che dimostrano che il modello possiede un buon bilanciamento, riuscendo ad identificare la maggior parte delle strutture rilevanti con una buona confidenza. Il tutto è mostrato in Figura \ref{fig:pr_best_1gb}.\\
-Questo risultato dimostra che l'architettura di YOLOv7 è idonea al compito scientifico, ma necessita di essere fermata al momento giusto (\textit{Early Stopping}) se i dati sono pochi.
-\begin{figure}[H]
+Il \textbf{\textit{checkpoint} Best} rappresenta lo stato del modello salvato dal sistema in presenza della massima performance sul validation set.\\
+I test effettuati su questo checkpoint hanno prodotto risultati apparentemente molto positivi, con una mAP@0.5 di 0.604. Tuttavia, data l'instabilità della curva di training discussa in precedenza, questo picco rappresenta un "minimo locale" fortuito piuttosto che una reale capacità di generalizzazione. Il modello ha trovato una configurazione di pesi favorevole per quel ristretto set di dati, ma priva di robustezza statistica. Il tutto è mostrato in Figura \ref{fig:pr_best_1gb}.\\
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.7\textwidth]{Figs/Cap4/pr_curve_best_1gb.png}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/pr_curve_best_1gb.png}
     \caption[Curva Precision-Recall (Checkpoint Best, Subset 1 GB)]{Curva Precision-Recall relativa ai pesi migliori (Checkpoint Best). L'area sottesa alla curva (mAP@0.5) raggiunge il valore di 0.604, indicando una buona capacità di rilevamento prima dell'insorgere dell'overfitting.}
     \label{fig:pr_best_1gb}
 \end{figure}
@@ -59,44 +156,43 @@ Questo risultato dimostra che l'architettura di YOLOv7 è idonea al compito scie
 \subsubsection{Test (Checkpoint Last)}
 Il \textbf{\textit{checkpoint} Last} corrisponde al modello finale, salvato al termine di tutte le epoche di addestramento previste. Qui, le conseguenze dell'overfitting diventano misurabili e severe. A causa dell'eccessiva specializzazione sul training set, il modello ha perso la capacità di riconoscere le regioni attive mai viste prima.\\
 Il crollo delle prestazioni, come mostrato in Figura \ref{fig:pr_last_1gb}, è drastico rispetto alla configurazione Best: mAP@0.5 scende a 0.224 (rispetto a 0.605 del Best).
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.7\textwidth]{Figs/Cap4/pr_curve_last_1gb.png}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/pr_curve_last_1gb.png}
     \caption[Curva Precision-Recall (Checkpoint Last, Subset 1 GB)]{Curva Precision-Recall del modello finale (Checkpoint Last) del Subset Ridotto. Il valore di mAP@0.5 crolla a 0.224, confermando che il prolungamento dell'addestramento su un dataset ridotto ha danneggiato le capacità di generalizzazione della rete.}
     \label{fig:pr_last_1gb}
 \end{figure}
 Dal punto di vista visivo, questo degrado si traduce in una "cecità" verso le regioni più piccole.\\
-Come mostrato nel confronto seguente (Figura \ref{fig:visual_compare_1gb}), mentre il \textit{Ground Truth} evidenzia numerose regioni attive di varia intensità, il modello finale è diventato estremamente conservativo: ignora la quasi totalità delle regioni attive (\textbf{Falsi Negativi}), rilevando sporadicamente solo quelle più estese ed evidenti.
-% --- PRIMA PARTE (Pagina 1) ---
-\begin{figure}[H]
+Come mostrato nel confronto tra i due pannelli in Figura \ref{fig:visual_compare_1gb}, mentre il \textit{Ground Truth} evidenzia numerose regioni attive di varie dimensioni e complessità, il modello finale è diventato estremamente conservativo: ignora la quasi totalità delle regioni attive (\textbf{Falsi Negativi}), rilevando sporadicamente solo quelle più estese ed evidenti.
+% --- INIZIO BLOCCO FIGURE ---
+\clearpage
+% --- PRIMA PARTE (Pagina N) ---
+\begin{figure}[p] 
     \centering
-    % Immagine A
     \includegraphics[width=1\textwidth]{Figs/Cap4/visual_labels_1gb.jpg}
     \vspace{0.1cm}
     {\footnotesize \textbf{(a) Ground Truth}}
-    % Didascalia della prima parte 
-    \caption[Confronto qualitativo (1 GB)]{Prima parte del Confronto Qualitativo.}
-    \label{fig:visual_compare_1gb}
 \end{figure}
-\clearpage % FORZA IL SALTO PAGINA 
-% --- SECONDA PARTE (Pagina 2) ---
-\begin{figure}[H]
-    \ContinuedFloat % Mantiene lo stesso numero di figura
+\clearpage
+% --- SECONDA PARTE  ---
+\begin{figure}[p]
+    \ContinuedFloat
     \centering
-    % Immagine B
     \includegraphics[width=1\textwidth]{Figs/Cap4/visual_pred_1gb.jpg}
     \vspace{0.1cm}
     {\footnotesize \textbf{(b) Predizione Modello Last}}
-    % Didascalia completa
-    \caption[]{Seconda parte del Confronto Qualitativo. In alto (a) nella pagina precedente le annotazioni reali, qui sopra (b) le predizioni. Si nota l'elevato numero di Falsi Negativi.}
+    \caption[Confronto Qualitativo (Dataset Ridotto)]{Confronto Qualitativo nel Dataset Ridotto. In (a) nella pagina precedente le annotazioni reali, in (b) le predizioni. Si nota l'elevato numero di Falsi Negativi.}
+    \label{fig:visual_compare_1gb}
 \end{figure}
+\clearpage 
+% --- FINE BLOCCO FIGURE ---
 
 \subsection{Risultati del Dataset Completo}
 L'addestramento sul dataset completo ha confermato l'ipotesi principale: l'aumento della varietà e quantità dei dati ha agito come fattore di regolarizzazione naturale, mitigando notevolmente il fenomeno dell'overfitting riscontrato nell'esperimento precedente.
 
 \subsubsection{Training}
 Il grafico dell'andamento dell'addestramento mostra un comportamento radicalmente diverso rispetto al caso del subset ridotto. Come visibile nella Figura \ref{fig:results_full}, le curve di validazione non presentano più la caratteristica forma a "picco e crollo". Al contrario, si osserva una \textbf{crescita progressiva delle metriche} (mAP, Precision, Recall) che tende a stabilizzarsi nella seconda metà della fase di training. Questo indica che il modello non sta più memorizzando i singoli esempi, ma sta apprendendo caratteristiche generalizzabili che rimangono valide anche sui dati di validazione. 
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
     \includegraphics[width=1\textwidth]{Figs/Cap4/results_full.png} 
     \caption[Curve di addestramento e validazione (Dataset Completo)]{Curve di addestramento sul Dataset Completo. A differenza del caso precedente, si nota una notevole stabilità: le metriche di validazione crescono e si mantengono costanti senza degradare, dimostrando che il modello ha raggiunto una convergenza robusta.}
@@ -105,45 +201,42 @@ Il grafico dell'andamento dell'addestramento mostra un comportamento radicalment
 
 \subsubsection{Test (Checkpoint Best)}
 Il \textbf{\textit{checkpoint} Best}, relativo al dataset completo, ha fatto registrare prestazioni eccellenti, raggiungendo un valore di mAP@0.5 pari a 0.597. Questo risultato è particolarmente significativo se confrontato con l'esperimento precedente: sebbene il valore numerico assoluto sia simile a quello del subset (0.604), la solidità statistica è ben diversa. Ottenere tale precisione su un dataset più vasto e variegato conferma che la rete neurale, quando alimentata con una quantità adeguata di informazioni, riesce ampiamente a generalizzare le caratteristiche morfologiche delle regioni attive senza ricorrere alla memorizzazione. La curva Precision-Recall, mostrata nella Figura \ref{fig:pr_best_full}, evidenzia un'area sottesa molto ampia, indice di un classificatore robusto.
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.65\textwidth]{Figs/Cap4/pr_curve_best_full.png}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/pr_curve_best_full.png}
     \caption[Curva Precision-Recall (Checkpoint Best, Dataset Completo)]{Curva Precision-Recall relativa ai pesi migliori (Checkpoint Best) del Dataset Completo. Il mAP raggiunge il valore di 0.597, confermando l'alta capacità di apprendimento del modello in presenza di un dataset adeguatamente dimensionato.}
     \label{fig:pr_best_full}
 \end{figure}
 
 \subsubsection{Test (Checkpoint Last)}
 L'analisi del \textbf{\textit{checkpoint} Last}, salvato al termine del ciclo di addestramento, offre la conferma definitiva della bontà dell'approccio basato sul dataset completo. Da quanto si evince nella Figura \ref{fig:pr_last_full}, il modello finale ha raggiunto una mAP@0.5 di 0.385. Sebbene si registri una flessione fisiologica tra il picco assoluto e lo stato finale, il modello mantiene una capacità predittiva solida. Questo dimostra che l'aumento dei dati ha agito efficacemente, prevenendo il crollo delle prestazioni (\textit{catastrophic forgetting}) che si era verificato nel primo esperimento.
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.65\textwidth]{Figs/Cap4/pr_curve_last_full.png}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/pr_curve_last_full.png}
     \caption[Curva Precision-Recall (Checkpoint Last, Dataset Completo)]{Curva Precision-Recall del modello finale (Checkpoint Last) del Dataset Completo. Il valore di mAP@0.5 si assesta a 0.385, dimostrando una tenuta delle prestazioni decisamente superiore rispetto al crollo osservato nel dataset ridotto.}
     \label{fig:pr_last_full}
 \end{figure}
 Anche l'analisi qualitativa conferma questi dati numerici. Come visibile nel confronto seguente (Figura \ref{fig:visual_compare_full}), le predizioni del modello riescono a localizzare correttamente la maggior parte delle regioni attive, mantenendo una buona copertura spaziale anche alla fine dell'addestramento e riducendo drasticamente i Falsi Negativi rispetto al modello addestrato su pochi dati.
-% --- PRIMA PARTE (Pagina 1) ---
-\begin{figure}[H]
+\clearpage 
+% --- PAGINA 1 (Pannello A) ---
+\begin{figure}[p] 
     \centering
-    % Immagine A
     \includegraphics[width=1\textwidth]{Figs/Cap4/visual_labels_last_full.jpg}
     \vspace{0.1cm}
     {\footnotesize \textbf{(a) Ground Truth}}
-    % Didascalia della prima parte 
-    \caption[Confronto qualitativo (Dataset Completo)]{Prima parte del Confronto Qualitativo.}
-    \label{fig:visual_compare_full}
 \end{figure}
-\clearpage % FORZA IL SALTO PAGINA 
-% --- SECONDA PARTE (Pagina 2) ---
-\begin{figure}[H]
-    \ContinuedFloat % Mantiene lo stesso numero di figura
+\clearpage
+% --- PAGINA 2 (Pannello B) ---
+\begin{figure}[p]
+    \ContinuedFloat 
     \centering
-    % Immagine B
     \includegraphics[width=1\textwidth]{Figs/Cap4/visual_pred_last_full.jpg}
     \vspace{0.1cm}
     {\footnotesize \textbf{(b) Predizione Modello Last}}
-    % Didascalia completa
-    \caption[]{Seconda parte del Confronto Qualitativo. In alto (a) le annotazioni reali (Ground Truth), in basso (b) le predizioni. Il modello dimostra di aver appreso le caratteristiche morfologiche, rilevando le regioni attive principali senza i numerosi errori di omissione riscontrati nell'esperimento da 1 GB.}
+    \caption[Confronto qualitativo (Dataset Completo)]{Confronto Qualitativo nel Dataset Completo. In (a) nella pagina precedente le annotazioni reali (Ground Truth), in (b) le predizioni qui sopra. Il modello dimostra di aver appreso le caratteristiche morfologiche, rilevando le regioni attive principali senza i numerosi errori di omissione riscontrati nell'esperimento da 1 GB.}
+    \label{fig:visual_compare_full}
 \end{figure}
+\clearpage 
 
 \subsection{Confronto e Discussione}
 \label{sec:confronto_discussione}
@@ -151,7 +244,7 @@ L'analisi congiunta dei due esperimenti condotti permette di trarre conclusioni 
 
 \subsubsection{Confronto delle Metriche}
 La tabella \ref{tab:confronto_metriche} riassume le prestazioni registrate nelle due configurazioni.
-\begin{table}[H]
+\begin{table}[tb]
 \centering
 \begin{tabular}{lccc}
 \hline
@@ -182,11 +275,11 @@ Per quantificare oggettivamente le qualità del tracciamento, le metriche prese 
 \end{itemize}
 
 \section{Risultati del Tracking}
-In questa sezione, sono presentati i risultati quantitativi e qualitativi, evidenziando come la qualità del modello di rilevamento influenzi direttamente la stabilità del tracciamento.
+In questa sezione, sono presentati i risultati quantitativi e qualitativi riferiti all'addestramento condotto sull'intero dataset, evidenziando come la qualità del modello di rilevamento influenzi direttamente la stabilità del tracciamento. 
 
 \subsection{Analisi Quantitativa}
 La Tabella \ref{tab:tracking_metrics} riassume le prestazioni misurate sui dati di test per le due configurazioni dei checkpoint.
-\begin{table}[H]
+\begin{table}[tb]
 \centering
 \begin{tabular}{lccc}
 \hline
@@ -213,32 +306,32 @@ L'analisi dello scenario ad alta attività evidenzia in modo netto l'importanza 
 Come mostrato nella Figura \ref{fig:scenario1_best}, il modello con i pesi migliori dimostra un'\textbf{elevata sensibilità} (Recall). La rete riesce a tracciare la quasi totalità delle regioni attive presenti, sovrapponendo correttamente i propri bounding box (blu) alle annotazioni di Ground Truth (rosso) su tutto il disco. Il sistema gestisce efficacemente la complessità della scena, rilevando con precisione sia le vaste strutture centrali sia le regioni minori situate in prossimità del bordo.\\
 Al contrario, la Figura \ref{fig:scenario1_last} illustra il comportamento del modello all'ultima epoca di addestramento sullo stesso frame temporale. In questa configurazione si osserva un \textbf{degrado delle prestazioni}: il modello traccia solamente un numero esiguo di regioni (circa 4 su oltre una decina presenti), ignorando completamente la maggior parte delle regioni attive. Questo elevato tasso di \textit{missed detections} suggerisce che, nelle fasi finali del training, la rete abbia subito un'instabilità o una perdita di capacità di generalizzazione (\textit{catastrophic forgetting}). \\
 Il confronto visivo tra le due Figure (\ref{fig:scenario1_best} e \ref{fig:scenario1_last}) convalida la scelta operativa di utilizzare il \textbf{\textit{checkpoint} Best}, l'unico in grado di garantire una copertura del segnale adeguata per il tracking delle regioni attive solari.
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.6\textwidth]{Figs/Cap4/best_scenario1.jpg}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/best_scenario1.jpg}
     \caption[Scenario 1 (Modello Best)]{Visualizzazione delle prestazioni in uno scenario ad alta densità di regioni attive con il Checkpoint Best. I bounding box blu (predizioni con ID Norfair) si sovrappongono efficacemente alla quasi totalità dei box rossi (Ground Truth con ID HARP).}
     \label{fig:scenario1_best}
 \end{figure}
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.6\textwidth]{Figs/Cap4/last_scenario1.jpg}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/last_scenario1.jpg}
     \caption[Scenario 1 (Modello Last)]{Visualizzazione dello stesso frame temporale elaborato con il Checkpoint Last. Si osserva un drastico calo delle performance: il modello ignora la maggior parte delle regioni attive presenti (box rossi privi di corrispettivo blu).}
     \label{fig:scenario1_last}
 \end{figure}
 
 \subsubsection{Secondo Scenario: Bassa Densità di Regioni Attive}
 Il secondo scenario di test valuta le prestazioni in condizioni di attività solare ridotta, selezionando un magnetogramma (risalente al 6 giugno 2019) caratterizzato da un disco solare prevalentemente quieto, con la presenza di sole tre regioni attive di dimensioni modeste e ben distanziate.\\
-La Figura \ref{fig:scenario2_best} mostra i risultati ottenuti con il checkpoint best. La rete conferma la sua \textbf{eccellente affidabilità}, tracciando correttamente tutte e tre le regioni attive presenti. I bounding box si sovrappongono con precisione alle annotazioni di Ground Truth, dimostrando che il modello è in grado di risolvere anche segnali di intensità minori o dimensioni ridotte, senza generare falsi positivi nelle aree vuote o interpretare il rumore di fondo come regione attiva.\\
+La Figura \ref{fig:scenario2_best} mostra i risultati ottenuti con il checkpoint best. La rete conferma la sua \textbf{eccellente affidabilità}, tracciando correttamente tutte e tre le regioni attive presenti. I bounding box si sovrappongono con precisione alle annotazioni di Ground Truth, dimostrando che il modello è in grado di rilevare regini regioni attive di piccole dimensioni e magneticamente deboli, senza generare falsi positivi nelle aree vuote o interpretare il rumore di fondo come regione attiva.\\
 Al contrario, la Figura \ref{fig:scenario2_last} evidenzia il comportamento del modello last. Anche in questo contesto semplificato, privo di affollamento, si osserva un \textbf{fallimento} nel rilevare due delle tre regioni presenti, limitandosi a tracciare solo la struttura più evidente. Le altre due regioni sono completamente ignorate, generando falsi negativi. Questo risultato è determinante: attesta che il checkpoint finale soffre di una \textbf{generalizzata perdita di sensibilità} (recall), rendendolo inadatto al monitoraggio operativo indipendentemente dalla complessità dell'attività solare del momento.
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.6\textwidth]{Figs/Cap4/best_scenario2.jpg} 
+    \includegraphics[width=1\textwidth]{Figs/Cap4/best_scenario2.jpg} 
     \caption[Scenario 2 (Modello Best)]{Visualizzazione in regime di bassa attività solare con Checkpoint Best. Il modello dimostra una perfetta capacità di copertura: tutte le tre regioni attive presenti (box rossi) vengono correttamente identificate e tracciate dal sistema (box blu), confermando l'alta affidabilità del checkpoint selezionato anche su oggetti di piccole dimensioni.}
     \label{fig:scenario2_best}
 \end{figure}
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
-    \includegraphics[width=0.6\textwidth]{Figs/Cap4/last_scenario2.jpg}
+    \includegraphics[width=1\textwidth]{Figs/Cap4/last_scenario2.jpg}
     \caption[Scenario 2 (Modello Last)]{Confronto sullo stesso frame a bassa attività con Checkpoint Last. Si evidenzia nuovamente l'instabilità dei pesi finali: il modello riesce a rilevare solo la regione più grande (HARP 7366), mancando completamente le due regioni adiacenti più piccole. Ciò conferma che il modello Last ha perso la capacità di generalizzare su segnali più deboli.}
     \label{fig:scenario2_last}
 \end{figure}
@@ -247,7 +340,7 @@ Al contrario, la Figura \ref{fig:scenario2_last} evidenzia il comportamento del 
 La terza casistica esamina la capacità del sistema di mantenere l'identità delle regioni attive nel tempo (\textit{Temporal Consistency}), una proprietà fondamentale per monitorare l'evoluzione dei fenomeni solari. Per questo test, è stata elaborata una sequenza temporale estesa, coprendo un intervallo di quattro giorni durante la fase di alta attività che va dal 14 al 18 Maggio 2012.\\
 La Figura \ref{fig:scenario3_best_sequence} presenta tre frame estratti dalla sequenza video generata dal modello best. In questo scenario, l'assenza dei box di Ground Truth permette di focalizzarsi esclusivamente sulla stabilità del tracciamento predittivo: ogni colore corrisponde ad un ID assegnato con l'utilizzo della libreria Norfair.\\
 L'analisi della sequenza evidenzia una \textbf{notevole robustezza nel tracciamento}, nonostante la rotazione solare e la morfologia mutevole delle regioni attive. È possibile notare, ad esempio, la regione identificata dal bounding box rosso nella parte alta: il sistema aggancia correttamente il 14 Maggio (Pannello \ref{fig:seq_t0}) e ne preserva l'identità (colore invariato) mentre attraversa il meridiano centrale il 16 Maggio (Pannello \ref{fig:seq_t1}) fino a raggiungere il limite sinistro il 18 Maggio (Pannello \ref{fig:seq_t2}). Un comportamento analogo si riscontra per la regione nel rettangolo ciano nella parte bassa. L'assenza di cambi di colore improvvisi (\textit{ID Switching}) conferma che il modello non solo \textbf{localizza gli oggetti}, ma ne \textbf{apprende efficacemente la traiettoria spazio-temporale}. 
-\begin{figure}[H]
+\begin{figure}[tb]
     \centering
     % --- Frame 1: 14 Maggio ---
     \begin{subfigure}[b]{0.32\textwidth}
@@ -277,7 +370,7 @@ L'analisi della sequenza evidenzia una \textbf{notevole robustezza nel tracciame
     \label{fig:scenario3_best_sequence}
 \end{figure}
 L'analisi di consistenza temporale (nel medesimo intervallo) estesa al modello Last, riportato in Figura \ref{fig:scenario3_last_sequence}, rivela un \textbf{comportamento duplice}: conferma la \textbf{scarsa sensibilità del rilevatore} poiché, rispetto al Best, il numero di regioni identificate è drasticamente inferiore, con aree attive minori ignorate; tuttavia, il sistema dimostra \textbf{stabilità nel tracciamento} delle regioni rilevate. Osservando il bounding box giallo (in alto) e quello ciano (in basso), è evidente che il modello riesce a preservare l'identità lungo l'arco temporale, seguendone correttamente lo spostamento dovuto alla rotazione solare. Questo risultato indica che le logiche di tracking di Norfair funzionano correttamente; il \textbf{collo di bottiglia prestazionale} risiede nella capacità della rete neurale di estrarre le feature dal singolo feame (detection) e non nella coerenza temporale.
- \begin{figure}[H]
+ \begin{figure}[tb]
     \centering
     % --- Frame 1: 14 Maggio (Last) ---
     \begin{subfigure}[b]{0.32\textwidth}
